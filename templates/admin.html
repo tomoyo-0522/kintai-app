@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理画面</title>
+
+<style>
+body{font-family:sans-serif;background:#f6f8fb;margin:0}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px;background:#1e66f5;color:#fff}
+.wrap{max-width:1000px;margin:20px auto;padding:16px}
+
+button{
+  padding:10px;
+  border-radius:10px;
+  border:none;
+  cursor:pointer;
+  font-weight:700;
+}
+
+.btn-blue{background:#1e66f5;color:#fff}
+.btn-gray{background:#e5e7eb;color:#000}
+.btn-green{background:#16a34a;color:#fff}
+.btn-red{background:#dc2626;color:#fff}
+
+.card{
+  background:#74a7db;
+  color:#fff;
+  border-radius:16px;
+  padding:16px;
+  margin-bottom:14px;
+}
+
+.top{
+  display:flex;
+  justify-content:space-between;
+  font-weight:700;
+  font-size:18px;
+}
+
+.section{
+  margin-top:10px;
+  background:#e9ecef;
+  color:#000;
+  padding:10px;
+  border-radius:8px;
+}
+
+.row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-top:6px;
+}
+
+.status-ok{color:#16a34a;font-weight:700}
+.status-ng{color:#dc2626;font-weight:700}
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1e66f5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="勤怠">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+</style>
+</head>
+
+<body>
+
+<header>
+  <div>
+    <strong>管理画面</strong>
+    <div id="userInfo"></div>
+  </div>
+  <div>
+    <button onclick="goStamp()" class="btn-gray">打刻画面</button>
+    <button onclick="logout()" class="btn-gray">ログアウト</button>
+  </div>
+</header>
+
+<div class="wrap">
+<div style="margin-bottom:15px;">
+  <input type="date" id="searchDate">
+  <input type="text" id="searchName" placeholder="名前で検索">
+  <button onclick="search()" class="btn-blue">検索</button>
+  <button onclick="resetSearch()" class="btn-gray">リセット</button>
+</div>
+  <div id="list"></div>
+</div>
+
+<script>
+const token = sessionStorage.getItem('token');
+const role = sessionStorage.getItem('role');
+const name = sessionStorage.getItem('name');
+
+if(!token) location.href='/login.html';
+
+document.getElementById('userInfo').textContent = name;
+
+function logout(){
+  sessionStorage.clear();
+  location.href='/login.html';
+}
+
+function goStamp(){
+  location.href='/stamp.html';
+}
+
+function formatDate(d){
+  return d ? d.replaceAll('-','/') : '';
+}
+
+async function load(date='', name=''){
+  let url = '/api/admin/daily?';
+
+  if(date) url += `date=${date}&`;
+  if(name) url += `name=${encodeURIComponent(name)}`;
+
+  const res = await fetch(url,{
+    headers:{Authorization:'Bearer '+token}
+  });
+
+  const data = await res.json();
+
+  const list = document.getElementById('list');
+  list.innerHTML='';
+
+  data.forEach(r=>{
+    const card = document.createElement('div');
+    card.className='card';
+
+    const attendanceStatus = r.attendance_manager_approved_at
+      ? '<span class="status-ok">承認済</span>'
+      : '<span class="status-ng">未承認</span>';
+
+    const overtimeStatus = r.overtime_requested_at ? 'あり' : 'なし';
+
+    const managerStatus = r.overtime_manager_approved_at
+      ? '<span class="status-ok">承認済</span>'
+      : '<span class="status-ng">未承認</span>';
+
+    const execStatus = r.overtime_executive_approved_at
+      ? '<span class="status-ok">承認済</span>'
+      : '<span class="status-ng">未承認</span>';
+
+    card.innerHTML = `
+      <div class="top">
+        <div>${r.work_date.replaceAll('-','/')}</div>
+        <div>${r.name}</div>
+      </div>
+
+      <div class="section">
+        勤怠承認：${attendanceStatus}<br>
+        <button class="btn-blue" onclick="approveAttendance(${r.id})">上長承認</button>
+      </div>
+
+      <div class="section">
+        残業：${overtimeStatus}<br>
+        上長：${managerStatus}
+        <button class="btn-green" onclick="approveManager(${r.id})">承認</button><br>
+        役員：${execStatus}
+        <button class="btn-red" onclick="approveExecutive(${r.id})">承認</button>
+      </div>
+    `;
+
+    list.appendChild(card);
+  });
+}
+
+async function approveAttendance(id){
+  await fetch('/api/approve/attendance',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      Authorization:'Bearer '+token
+    },
+    body:JSON.stringify({id})
+  });
+  load();
+}
+
+async function approveManager(id){
+  await fetch('/api/approve/overtime/manager',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      Authorization:'Bearer '+token
+    },
+    body:JSON.stringify({id})
+  });
+  load();
+}
+
+async function approveExecutive(id){
+  await fetch('/api/approve/overtime/executive',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      Authorization:'Bearer '+token
+    },
+    body:JSON.stringify({id})
+  });
+  load();
+}
+
+function search(){
+  const date = document.getElementById('searchDate').value;
+  const name = document.getElementById('searchName').value;
+  load(date, name);
+}
+
+function resetSearch(){
+  document.getElementById('searchDate').value = '';
+  document.getElementById('searchName').value = '';
+  load();
+}
+
+load();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js");
+}
+</script>
+
+</body>
+</html>

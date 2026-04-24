@@ -1,0 +1,9 @@
+{
+  "name": "勤怠管理",
+  "short_name": "勤怠",
+  "start_url": "/login.html",
+  "display": "standalone",
+  "background_color": "#f6f8fb",
+  "theme_color": "#1e66f5",
+  "icons": []
+}
