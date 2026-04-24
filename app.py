@@ -464,6 +464,57 @@ def overtime_request():
         "daily": build_daily_summary(updated)
     })
 
+@app.post("/api/day-info/save")
+@auth_required()
+def save_day_info():
+    data = request.get_json(force=True)
+
+    work_date = (data.get("work_date") or today_text()).strip()
+    work_type = (data.get("work_type") or "").strip()
+    has_help = 1 if data.get("has_help") else 0
+    help_department = (data.get("help_department") or "").strip()
+    help_time = (data.get("help_time") or "").strip()
+    remarks = (data.get("remarks") or "").strip()
+
+    if not work_type:
+        return jsonify({"error": "勤務形態を選択してください"}), 400
+
+    get_or_create_daily_record(g.current_user["id"], work_date)
+    db = get_db()
+
+    db.execute(
+        """
+        UPDATE daily_records
+        SET work_type = ?,
+            has_help = ?,
+            help_department = ?,
+            help_time = ?,
+            remarks = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ? AND work_date = ?
+        """,
+        (
+            work_type,
+            has_help,
+            help_department,
+            help_time,
+            remarks,
+            g.current_user["id"],
+            work_date
+        )
+    )
+    db.commit()
+
+    updated = db.execute(
+        "SELECT * FROM daily_records WHERE user_id = ? AND work_date = ?",
+        (g.current_user["id"], work_date)
+    ).fetchone()
+
+    return jsonify({
+        "message": "saved",
+        "daily": build_daily_summary(updated)
+    })
+
 
 @app.get("/api/my-attendance")
 @auth_required()

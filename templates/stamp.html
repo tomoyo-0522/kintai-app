@@ -16,6 +16,9 @@
     .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
     label{display:block;margin:0 0 6px;font-size:14px;font-weight:700}
     input,select,textarea,button{width:100%;padding:10px;border-radius:10px;border:1px solid #ccd3df;box-sizing:border-box}
+input,select,textarea,button{
+  min-height:42px;
+}
     button{cursor:pointer;background:#1e66f5;color:#fff;border:none;font-weight:700}
     .secondary{background:#fff;color:#1e66f5;border:1px solid #cbd5e1}
     .status{margin-top:14px;font-size:15px}
@@ -104,6 +107,14 @@
        <!-- <div class="muted">有効QR文字列: KUMAMOTO_HIGO</div> -->
       </div>
     </div>
+
+<div class="card">
+  <div class="section-title">休暇・日次情報登録</div>
+  <button id="dayInfoBtn" type="button">勤務形態・ヘルプ・備考を保存</button>
+  <div class="muted" style="margin-top:8px;">
+    有給・休暇の場合はQR読み取り不要です。このボタンで保存してください。
+  </div>
+</div>
 
     <div class="card">
       <div class="section-title">残業申請</div>
@@ -305,6 +316,50 @@ statusEl.style.color = 'black';
       await loadHistory();
     }
 
+function isLeaveType(workType) {
+  return [
+    '有給（一日）',
+    '有給（半日）',
+    'リフレッシュ休暇',
+    'メモリアル休暇',
+    '忌引き'
+  ].includes(workType);
+}
+
+async function saveDayInfo() {
+  const payload = getFormPayload();
+
+  if (!payload.work_type) {
+    statusEl.textContent = '勤務形態を選択してください';
+    statusEl.style.color = 'red';
+    return;
+  }
+
+  const res = await fetch('/api/day-info/save', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    statusEl.textContent = data.error || '保存に失敗しました';
+    statusEl.style.color = 'red';
+    return;
+  }
+
+  statusEl.textContent = isLeaveType(payload.work_type)
+    ? '休暇情報を保存しました'
+    : '勤務形態・ヘルプ・備考を保存しました';
+  statusEl.style.color = 'black';
+
+  await loadHistory();
+}
+
     async function submitOvertime() {
       const workDate = document.getElementById('workDate').value;
       const plannedEndTime = document.getElementById('plannedEndTime').value.trim();
@@ -438,6 +493,7 @@ statusEl.style.color = 'black';
 
     document.getElementById('startBtn').onclick = startCamera;
     document.getElementById('overtimeBtn').onclick = submitOvertime;
+    document.getElementById('dayInfoBtn').onclick = saveDayInfo;
     document.getElementById('workDate').value = todayString();
 
     loadHistory();
