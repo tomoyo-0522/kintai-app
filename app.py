@@ -464,6 +464,76 @@ def overtime_request():
         "daily": build_daily_summary(updated)
     })
 
+@app.post("/api/day-record/update")
+@auth_required()
+def update_day_record():
+    data = request.get_json(force=True)
+
+    work_date = (data.get("work_date") or today_text()).strip()
+    work_type = (data.get("work_type") or "").strip()
+    clock_in = (data.get("clock_in") or "").strip()
+    break_start = (data.get("break_start") or "").strip()
+    break_end = (data.get("break_end") or "").strip()
+    clock_out = (data.get("clock_out") or "").strip()
+    overtime_planned_end = (data.get("overtime_planned_end") or "").strip()
+    overtime_reason = (data.get("overtime_reason") or "").strip()
+    has_help = 1 if data.get("has_help") else 0
+    help_department = (data.get("help_department") or "").strip()
+    help_time = (data.get("help_time") or "").strip()
+    remarks = (data.get("remarks") or "").strip()
+
+    if not work_date:
+        return jsonify({"error": "日付を入力してください"}), 400
+
+    get_or_create_daily_record(g.current_user["id"], work_date)
+    db = get_db()
+
+    db.execute(
+        """
+        UPDATE daily_records
+        SET work_type = ?,
+            clock_in = ?,
+            break_start = ?,
+            break_end = ?,
+            clock_out = ?,
+            overtime_planned_end = ?,
+            overtime_reason = ?,
+            has_help = ?,
+            help_department = ?,
+            help_time = ?,
+            remarks = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ? AND work_date = ?
+        """,
+        (
+            work_type,
+            clock_in or None,
+            break_start or None,
+            break_end or None,
+            clock_out or None,
+            overtime_planned_end,
+            overtime_reason,
+            has_help,
+            help_department,
+            help_time,
+            remarks,
+            g.current_user["id"],
+            work_date,
+        )
+    )
+
+    db.commit()
+
+    updated = db.execute(
+        "SELECT * FROM daily_records WHERE user_id = ? AND work_date = ?",
+        (g.current_user["id"], work_date)
+    ).fetchone()
+
+    return jsonify({
+        "message": "updated",
+        "daily": build_daily_summary(updated)
+    })
+
 @app.post("/api/day-info/save")
 @auth_required()
 def save_day_info():

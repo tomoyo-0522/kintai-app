@@ -13,524 +13,537 @@
     .card{background:#fff;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.08);padding:20px}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
-    .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-    label{display:block;margin:0 0 6px;font-size:14px;font-weight:700}
-    input,select,textarea,button{width:100%;padding:10px;border-radius:10px;border:1px solid #ccd3df;box-sizing:border-box}
-input,select,textarea,button{
-  min-height:42px;
-}
+    label{display:block;margin:10px 0 6px;font-size:14px;font-weight:700}
+    input,select,textarea,button{width:100%;min-height:46px;padding:10px 14px;border-radius:12px;border:1px solid #ccd3df;box-sizing:border-box;font-size:16px}
+    input[type="date"]{appearance:none;-webkit-appearance:none;text-align:center;background:#f3f4f6}
     button{cursor:pointer;background:#1e66f5;color:#fff;border:none;font-weight:700}
     .secondary{background:#fff;color:#1e66f5;border:1px solid #cbd5e1}
-    .status{margin-top:14px;font-size:15px}
-    video{width:100%;border-radius:12px;background:#000;max-height:360px}
-    canvas{display:none}
     .section-title{font-size:18px;font-weight:700;margin-bottom:12px}
-    .stamp-btn.active{background:#134db9}
+    .status{margin-top:12px;font-weight:700}
+    .muted{font-size:13px;color:#555;margin-top:8px}
+    video{width:100%;border-radius:12px;background:#000;max-height:280px}
+    canvas{display:none}
     .history-list{display:grid;gap:14px}
     .history-card{background:#74a7db;color:#fff;border-radius:18px;padding:18px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
-    .history-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
-    .history-date{font-size:22px;font-weight:700}
-    .history-name{font-size:22px;font-weight:700}
-    .history-type{text-align:center;font-size:20px;font-weight:700;margin:12px 0 18px}
+    .history-top{display:flex;justify-content:space-between;gap:10px;margin-bottom:10px;font-weight:700;font-size:20px}
+    .history-type{text-align:center;font-size:19px;font-weight:700;margin:10px 0 14px}
     .history-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .history-box{background:#e9ecef;color:#000;border-radius:6px;padding:12px;text-align:center}
-    .history-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-    .history-label{font-size:18px;font-weight:700}
-    .history-value{font-size:18px;font-weight:700}
-    .history-footer{margin-top:14px;background:#ecd893;color:#000;border-radius:6px;padding:12px;font-size:18px;font-weight:700}
-    .muted{font-size:13px;color:#555}
+    .history-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px}
+    .history-label{font-size:16px;font-weight:700}
+    .history-box{background:#e9ecef;color:#000;border-radius:6px;padding:10px;text-align:center;font-weight:700;min-width:80px}
+    .history-footer{margin-top:12px;background:#ecd893;color:#000;border-radius:6px;padding:10px;font-weight:700}
+    .edit-area{display:none;margin-top:14px;background:#fff;color:#000;border-radius:12px;padding:14px}
+    .edit-area input,.edit-area select,.edit-area textarea{background:#f3f4f6}
+    .small-btn{margin-top:10px}
     @media(max-width:900px){
-      .grid2,.grid3,.grid4,.history-grid{grid-template-columns:1fr}
-      .history-top{flex-direction:column;align-items:flex-start}
-      .history-date,.history-name{font-size:18px}
+      .grid2,.grid3,.history-grid{grid-template-columns:1fr}
+      .history-top{flex-direction:column;font-size:18px}
     }
-
-input[type="date"],
-select,
-input[type="text"],
-textarea {
-  width: 100%;
-  max-width: 100%;
-  height: 56px;
-  padding: 0 16px;
-  font-size: 16px;
-  border-radius: 14px;
-  box-sizing: border-box;
-  background: #f3f4f6;
-  border: 1px solid #ccd3df;
-  display: block;
-}
-
-textarea {
-  height: auto;
-  padding-top: 12px;
-}
-
-input[type="date"] {
-  appearance: none;
-  -webkit-appearance: none;
-  text-align: center;
-}
-
   </style>
-
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#1e66f5">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="勤怠">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-
 </head>
 <body>
-  <header>
-    <div>
-      <strong>勤怠管理（社員用）</strong>
-      <div id="userInfo"></div>
-    </div>
-    <div class="header-right">
-      <button id="adminBtn" type="button" class="secondary" style="display:none;width:auto;">管理画面</button>
-      <button id="logoutBtn" type="button" class="secondary" style="width:auto;">ログアウト</button>
-    </div>
-  </header>
-
-  <div class="wrap">
-    <div class="card">
-      <div class="section-title">本日の入力</div>
-
-      <div class="grid2">
-        <div>
-          <label>日付</label>
-          <input id="workDate" type="date">
-        </div>
-        <div>
-          <label>勤務形態（出勤時のみ必須）</label>
-          <select id="workType">
-            <option value="">選択してください</option>
-            <option value="一日勤務">一日勤務</option>
-            <option value="半日勤務">半日勤務</option>
-            <option value="有給（一日）">有給（一日）</option>
-            <option value="有給（半日）">有給（半日）</option>
-            <option value="リフレッシュ休暇">リフレッシュ休暇</option>
-            <option value="メモリアル休暇">メモリアル休暇</option>
-            <option value="忌引き">忌引き</option>
-          </select>
-        </div>
-      </div>
-
-      <div style="margin-top:14px;">
-        <label>打刻種別</label>
-        <div class="grid4">
-          <button type="button" id="clockInBtn" class="stamp-btn" data-type="clock_in">出勤</button>
-          <button type="button" class="stamp-btn" data-type="break_start">休憩開始</button>
-          <button type="button" class="stamp-btn" data-type="break_end">休憩終了</button>
-          <button type="button" class="stamp-btn" data-type="clock_out">退勤</button>
-        </div>
-      </div>
-
-      <div style="margin-top:16px;">
-        <video id="video" autoplay muted playsinline></video>
-        <canvas id="canvas"></canvas>
-        <button id="startBtn" type="button" style="margin-top:12px;">カメラを起動してQR読み取り開始</button>
-        <div class="status" id="status">打刻種別を選択して、カメラを起動してください。</div>
-       <!-- <div class="muted">有効QR文字列: KUMAMOTO_HIGO</div> -->
-      </div>
-    </div>
-
-<div class="card">
-  <div class="section-title">休暇・日次情報登録</div>
-  <button id="dayInfoBtn" type="button">勤務形態・ヘルプ・備考を保存</button>
-  <div class="muted" style="margin-top:8px;">
-    有給・休暇の場合はQR読み取り不要です。このボタンで保存してください。
+<header>
+  <div>
+    <strong>勤怠管理（社員用）</strong>
+    <div id="userInfo"></div>
   </div>
+  <div class="header-right">
+    <button id="adminBtn" type="button" class="secondary" style="display:none;width:auto;">管理画面</button>
+    <button id="logoutBtn" type="button" class="secondary" style="width:auto;">ログアウト</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <div class="section-title">本日の入力</div>
+
+    <div class="grid3">
+      <div>
+        <label>日付</label>
+        <input id="workDate" type="date">
+      </div>
+
+      <div>
+        <label>勤務形態</label>
+        <select id="workType">
+          <option value="">選択してください</option>
+          <option value="一日勤務">一日勤務</option>
+          <option value="半日勤務">半日勤務</option>
+          <option value="有給（一日）">有給（一日）</option>
+          <option value="有給（半日）">有給（半日）</option>
+          <option value="リフレッシュ休暇">リフレッシュ休暇</option>
+          <option value="メモリアル休暇">メモリアル休暇</option>
+          <option value="忌引き">忌引き</option>
+        </select>
+      </div>
+
+      <div>
+        <label>打刻種別</label>
+        <select id="stampType">
+          <option value="">選択してください</option>
+          <option value="clock_in">出勤</option>
+          <option value="break_start">休憩開始</option>
+          <option value="break_end">休憩終了</option>
+          <option value="clock_out">退勤</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="muted">
+      一日勤務・半日勤務はQR読み取りで打刻します。有給・休暇は下の「休暇登録」から保存してください。
+    </div>
+
+    <button id="leaveBtn" type="button" class="small-btn">休暇登録（QR不要）</button>
+
+    <div style="margin-top:16px;">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="canvas"></canvas>
+      <button id="startBtn" type="button" class="small-btn">QR読み取り開始</button>
+      <div class="status" id="status">勤務形態と打刻種別を選択してください。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">残業申請</div>
+    <div class="grid3">
+      <div>
+        <label>残業申請日時</label>
+        <input id="overtimeRequestedAt" type="text" readonly placeholder="申請時に反映">
+      </div>
+      <div>
+        <label>残業終了予定時刻</label>
+        <input id="plannedEndTime" type="text" placeholder="例 19:30">
+      </div>
+      <div>
+        <label>残業申請理由</label>
+        <input id="overtimeReason" type="text" placeholder="理由を入力">
+      </div>
+    </div>
+    <button id="overtimeBtn" type="button" class="small-btn">残業申請</button>
+  </div>
+
+  <div class="card">
+    <div class="section-title">ヘルプ・備考</div>
+    <div class="grid3">
+      <div>
+        <label>ヘルプ有無</label>
+        <select id="hasHelp">
+          <option value="0">なし</option>
+          <option value="1">あり</option>
+        </select>
+      </div>
+      <div>
+        <label>ヘルプ部署</label>
+        <input id="helpDepartment" type="text" placeholder="ヘルプ部署">
+      </div>
+      <div>
+        <label>ヘルプ時間</label>
+        <input id="helpTime" type="text" placeholder="例 2時間">
+      </div>
+    </div>
+    <label>備考欄</label>
+    <textarea id="remarks" rows="3" placeholder="備考を入力"></textarea>
+    <button id="helpSaveBtn" type="button" class="small-btn">ヘルプ・備考を保存</button>
+  </div>
+
+  <div class="card">
+    <div class="section-title">自分の過去データ</div>
+    <div id="historyList" class="history-list"></div>
+  </div>
+
 </div>
 
-    <div class="card">
-      <div class="section-title">残業申請</div>
-      <div class="grid3">
-        <div>
-          <label>残業申請日時</label>
-          <input id="overtimeRequestedAt" type="text" readonly placeholder="申請ボタン押下時に反映">
-        </div>
-        <div>
-          <label>残業終了予定時刻</label>
-          <input id="plannedEndTime" type="text" placeholder="例 19:30">
-        </div>
-        <div>
-          <label>残業申請理由</label>
-          <input id="overtimeReason" type="text" placeholder="理由を入力">
-        </div>
-      </div>
-      <button id="overtimeBtn" type="button" style="margin-top:14px;">残業申請</button>
-    </div>
+<script>
+const token = sessionStorage.getItem('token');
+const role = sessionStorage.getItem('role');
+const userName = sessionStorage.getItem('name');
 
-    <div class="card">
-      <div class="section-title">ヘルプ・備考</div>
-      <div class="grid3">
-        <div>
-          <label>ヘルプ有無</label>
-          <select id="hasHelp">
-            <option value="0">なし</option>
-            <option value="1">あり</option>
-          </select>
-        </div>
-        <div>
-          <label>ヘルプ部署</label>
-          <input id="helpDepartment" type="text" placeholder="ヘルプ部署">
-        </div>
-        <div>
-          <label>ヘルプ時間</label>
-          <input id="helpTime" type="text" placeholder="例 2時間">
-        </div>
-      </div>
-      <div style="margin-top:14px;">
-        <label>備考欄</label>
-        <textarea id="remarks" rows="3" placeholder="備考を入力"></textarea>
-      </div>
-    </div>
+if (!token) location.href = '/login.html';
 
-    <div class="card">
-      <div class="section-title">自分の過去データ</div>
-      <div id="historyList" class="history-list"></div>
-    </div>
-  </div>
+document.getElementById('userInfo').textContent = userName || '';
 
-  <script>
-    const token = sessionStorage.getItem('token');
-    const role = sessionStorage.getItem('role');
-    const userName = sessionStorage.getItem('name');
+document.getElementById('logoutBtn').onclick = () => {
+  sessionStorage.clear();
+  location.href = '/login.html';
+};
 
-    if (!token) location.href = '/login.html';
+if (role === 'admin') {
+  const btn = document.getElementById('adminBtn');
+  btn.style.display = 'inline-block';
+  btn.onclick = () => location.href = '/admin.html';
+}
 
-    document.getElementById('userInfo').textContent = userName || '';
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const historyListEl = document.getElementById('historyList');
 
-    document.getElementById('logoutBtn').onclick = () => {
-      sessionStorage.clear();
-      location.href = '/login.html';
-    };
+let stream = null;
+let isScanning = false;
+let lastScanTime = 0;
 
-    if (role === 'admin') {
-      const btn = document.getElementById('adminBtn');
-      btn.style.display = 'inline-block';
-      btn.onclick = () => location.href = '/admin.html';
-    }
+function todayString(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const statusEl = document.getElementById('status');
-    const historyListEl = document.getElementById('historyList');
+function timeOnly(v){
+  if(!v) return '0:00';
+  const s = String(v);
+  const parts = s.split(' ');
+  if(parts.length >= 2) return parts[1].slice(0,5);
+  return s.slice(0,5) || '0:00';
+}
 
-    let selectedStampType = null;
-    let stream = null;
-    let isScanning = false;
-    let lastScanTime = 0;
+function ymdToSlash(v){
+  return v ? String(v).replaceAll('-','/') : '';
+}
 
-    function todayString() {
-      const d = new Date();
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    }
+function isLeaveType(workType){
+  return ['有給（一日）','有給（半日）','リフレッシュ休暇','メモリアル休暇','忌引き'].includes(workType);
+}
 
-    function timeOnly(v) {
-      if (!v) return '0:00';
-      const s = String(v);
-      const parts = s.split(' ');
-      if (parts.length >= 2) return parts[1].slice(0, 5);
-      return '0:00';
-    }
+function getBasePayload(){
+  return {
+    work_date: document.getElementById('workDate').value,
+    work_type: document.getElementById('workType').value,
+    has_help: document.getElementById('hasHelp').value === '1',
+    help_department: document.getElementById('helpDepartment').value,
+    help_time: document.getElementById('helpTime').value,
+    remarks: document.getElementById('remarks').value
+  };
+}
 
-    function ymdToSlash(v) {
-      if (!v) return '';
-      return String(v).replaceAll('-', '/');
-    }
+function setStatus(msg, isError=false){
+  statusEl.textContent = msg;
+  statusEl.style.color = isError ? 'red' : 'black';
+}
 
-    function getFormPayload() {
-      return {
-        work_date: document.getElementById('workDate').value,
-        work_type: document.getElementById('workType').value,
-        has_help: document.getElementById('hasHelp').value === '1',
-        help_department: document.getElementById('helpDepartment').value,
-        help_time: document.getElementById('helpTime').value,
-        remarks: document.getElementById('remarks').value
-      };
-    }
-
-   function setSelectedStampType(type) {
+async function startCamera(){
   const workType = document.getElementById('workType').value;
+  const stampType = document.getElementById('stampType').value;
 
-  if (type === 'clock_in' && !workType) {
-    statusEl.textContent = '勤務形態を選択してください';
-    statusEl.style.color = 'red';
+  if(!workType){
+    setStatus('勤務形態を選択してください', true);
     return;
   }
 
-  selectedStampType = type;
+  if(isLeaveType(workType)){
+    setStatus('有給・休暇はQR不要です。休暇登録ボタンで保存してください。', true);
+    return;
+  }
 
-  document.querySelectorAll('.stamp-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.type === type);
-  });
+  if(!stampType){
+    setStatus('打刻種別を選択してください', true);
+    return;
+  }
 
-  statusEl.textContent = `「${document.querySelector('.stamp-btn.active')?.textContent || ''}」を選択しました。QRを読み取ってください。`;
-statusEl.style.color = 'black';
-}
-
-    document.querySelectorAll('.stamp-btn').forEach(btn => {
-      btn.onclick = () => setSelectedStampType(btn.dataset.type);
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:'environment'}},
+      audio:false
     });
-
-    async function startCamera() {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
-          audio: false
-        });
-        video.srcObject = stream;
-        await video.play();
-        requestAnimationFrame(scanLoop);
-        statusEl.textContent = selectedStampType
-          ? 'QRコードを読み取ってください。'
-          : '先に打刻種別を選択してください。';
-      } catch (e) {
-        statusEl.textContent = 'カメラへのアクセスを許可してください';
-        console.error(e);
-      }
-    }
-
-    async function sendStamp(qrValue) {
-      if (!selectedStampType) {
-        statusEl.textContent = '先に打刻種別を選択してください。';
-        return;
-      }
-
-      const payload = {
-        ...getFormPayload(),
-        type: selectedStampType,
-        qr_value: qrValue
-      };
-
-
-      if (selectedStampType === 'clock_in' && !payload.work_type) {
-        statusEl.textContent = '出勤時は勤務形態を選択してください。';
-        return;
-      }
-
-      const res = await fetch('/api/stamp', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + token
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-  statusEl.textContent = data.error || '打刻に失敗しました';
-  statusEl.style.color = 'red';   // ← 追加
-  return;
-}
-
-      const labelMap = {
-        clock_in: '出勤',
-        break_start: '休憩開始',
-        break_end: '休憩終了',
-        clock_out: '退勤'
-      };
-      statusEl.textContent = `${labelMap[data.type]}を記録しました (${timeOnly(data.timestamp)})`;
-statusEl.style.color = 'black';
-      await loadHistory();
-    }
-
-function isLeaveType(workType) {
-  return [
-    '有給（一日）',
-    '有給（半日）',
-    'リフレッシュ休暇',
-    'メモリアル休暇',
-    '忌引き'
-  ].includes(workType);
-}
-
-async function saveDayInfo() {
-  const payload = getFormPayload();
-
-  if (!payload.work_type) {
-    statusEl.textContent = '勤務形態を選択してください';
-    statusEl.style.color = 'red';
-    return;
+    video.srcObject = stream;
+    await video.play();
+    requestAnimationFrame(scanLoop);
+    setStatus('QRコードを読み取ってください');
+  }catch(e){
+    setStatus('カメラへのアクセスを許可してください', true);
+    console.error(e);
   }
+}
 
-  const res = await fetch('/api/day-info/save', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + token
+async function sendStamp(qrValue){
+  const payload = {
+    ...getBasePayload(),
+    type: document.getElementById('stampType').value,
+    qr_value: qrValue
+  };
+
+  const res = await fetch('/api/stamp',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+token
     },
-    body: JSON.stringify(payload)
+    body:JSON.stringify(payload)
   });
 
   const data = await res.json();
 
-  if (!res.ok) {
-    statusEl.textContent = data.error || '保存に失敗しました';
-    statusEl.style.color = 'red';
+  if(!res.ok){
+    setStatus(data.error || '打刻に失敗しました', true);
     return;
   }
 
-  statusEl.textContent = isLeaveType(payload.work_type)
-    ? '休暇情報を保存しました'
-    : '勤務形態・ヘルプ・備考を保存しました';
-  statusEl.style.color = 'black';
+  const labelMap = {
+    clock_in:'出勤',
+    break_start:'休憩開始',
+    break_end:'休憩終了',
+    clock_out:'退勤'
+  };
 
+  setStatus(`${labelMap[data.type]}を記録しました (${timeOnly(data.timestamp)})`);
   await loadHistory();
 }
 
-    async function submitOvertime() {
-      const workDate = document.getElementById('workDate').value;
-      const plannedEndTime = document.getElementById('plannedEndTime').value.trim();
-      const overtimeReason = document.getElementById('overtimeReason').value.trim();
+async function saveDayInfo(message){
+  const payload = getBasePayload();
 
-      const res = await fetch('/api/overtime-request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + token
-        },
-        body: JSON.stringify({
-          work_date: workDate,
-          planned_end_time: plannedEndTime,
-          reason: overtimeReason
-        })
-      });
+  if(!payload.work_type){
+    setStatus('勤務形態を選択してください', true);
+    return;
+  }
 
-      const data = await res.json();
+  const res = await fetch('/api/day-info/save',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+token
+    },
+    body:JSON.stringify(payload)
+  });
 
-      if (!res.ok) {
-        statusEl.textContent = data.error || '残業申請に失敗しました';
-        return;
-      }
+  const data = await res.json();
 
-      document.getElementById('overtimeRequestedAt').value = new Date().toLocaleString('ja-JP');
-      statusEl.textContent = '残業申請を記録しました';
-      await loadHistory();
-    }
+  if(!res.ok){
+    setStatus(data.error || '保存に失敗しました', true);
+    return;
+  }
 
-    async function handleScan(text) {
-      isScanning = true;
-      lastScanTime = Date.now();
-
-      if (text !== 'KUMAMOTO_HIGO') {
-        statusEl.textContent = '有効なQRコードではありません';
-        setTimeout(() => { isScanning = false; }, 3000);
-        return;
-      }
-
-      try {
-        await sendStamp(text);
-      } catch (e) {
-        statusEl.textContent = '通信エラーが発生しました';
-        console.error(e);
-      }
-
-      setTimeout(() => { isScanning = false; }, 3000);
-    }
-
-    function scanLoop() {
-      requestAnimationFrame(scanLoop);
-
-      if (isScanning) return;
-      if (Date.now() - lastScanTime < 2000) return;
-      if (!video.srcObject) return;
-      if (video.readyState < 2) return;
-
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, canvas.width, canvas.height);
-
-      if (code) {
-        handleScan(code.data);
-      }
-    }
-
-    function renderHistory(rows) {
-      historyListEl.innerHTML = '';
-
-      if (!rows.length) {
-        historyListEl.innerHTML = '<div class="muted">まだ打刻履歴がありません。</div>';
-        return;
-      }
-
-      rows.forEach(row => {
-        const card = document.createElement('div');
-        card.className = 'history-card';
-
-        const overtimeText = row.overtime_requested_at ? '残業申請あり' : '残業申請なし';
-
-        card.innerHTML = `
-          <div class="history-top">
-            <div class="history-date">${ymdToSlash(row.work_date)}</div>
-            <div class="history-name">${userName || ''}</div>
-          </div>
-
-          <div class="history-type">${row.work_type || ''}</div>
-
-          <div class="history-grid">
-            <div>
-              <div class="history-row">
-                <div class="history-label">出勤</div>
-                <div class="history-box history-value">${timeOnly(row.clock_in)}</div>
-              </div>
-              <div class="history-row">
-                <div class="history-label">勤務</div>
-                <div class="history-box history-value">${row.work_duration || '0:00'}</div>
-              </div>
-            </div>
-            <div>
-              <div class="history-row">
-                <div class="history-label">退勤</div>
-                <div class="history-box history-value">${timeOnly(row.clock_out)}</div>
-              </div>
-              <div class="history-row">
-                <div class="history-label">休憩</div>
-                <div class="history-box history-value">${row.break_duration || '0:00'}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="history-footer">${overtimeText}</div>
-        `;
-
-        historyListEl.appendChild(card);
-      });
-    }
-
-    async function loadHistory() {
-      const res = await fetch('/api/my-attendance', {
-        headers: { Authorization: 'Bearer ' + token }
-      });
-      const data = await res.json();
-      renderHistory(data);
-    }
-
-
-    document.getElementById('startBtn').onclick = startCamera;
-    document.getElementById('overtimeBtn').onclick = submitOvertime;
-    document.getElementById('dayInfoBtn').onclick = saveDayInfo;
-    document.getElementById('workDate').value = todayString();
-
-    loadHistory();
-  </script>
-<script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js");
+  setStatus(message);
+  await loadHistory();
 }
-</script>
 
+async function saveLeave(){
+  const workType = document.getElementById('workType').value;
+
+  if(!isLeaveType(workType)){
+    setStatus('休暇登録は有給・休暇を選択した場合のみ使用できます', true);
+    return;
+  }
+
+  await saveDayInfo('休暇情報を保存しました');
+}
+
+async function saveHelpRemarks(){
+  const workType = document.getElementById('workType').value;
+
+  if(workType === '一日勤務' || workType === '半日勤務'){
+    setStatus('一日勤務・半日勤務は出勤QR打刻時に勤務形態を保存してください', true);
+    return;
+  }
+
+  await saveDayInfo('ヘルプ・備考を保存しました');
+}
+
+async function submitOvertime(){
+  const workDate = document.getElementById('workDate').value;
+  const plannedEndTime = document.getElementById('plannedEndTime').value.trim();
+  const overtimeReason = document.getElementById('overtimeReason').value.trim();
+
+  const res = await fetch('/api/overtime-request',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+token
+    },
+    body:JSON.stringify({
+      work_date: workDate,
+      planned_end_time: plannedEndTime,
+      reason: overtimeReason
+    })
+  });
+
+  const data = await res.json();
+
+  if(!res.ok){
+    setStatus(data.error || '残業申請に失敗しました', true);
+    return;
+  }
+
+  document.getElementById('overtimeRequestedAt').value = new Date().toLocaleString('ja-JP');
+  setStatus('残業申請を記録しました');
+  await loadHistory();
+}
+
+async function handleScan(text){
+  isScanning = true;
+  lastScanTime = Date.now();
+
+  if(text !== 'KUMAMOTO_HIGO'){
+    setStatus('有効なQRコードではありません', true);
+    setTimeout(()=>{isScanning=false},3000);
+    return;
+  }
+
+  try{
+    await sendStamp(text);
+  }catch(e){
+    setStatus('通信エラーが発生しました', true);
+    console.error(e);
+  }
+
+  setTimeout(()=>{isScanning=false},3000);
+}
+
+function scanLoop(){
+  requestAnimationFrame(scanLoop);
+  if(isScanning) return;
+  if(Date.now() - lastScanTime < 2000) return;
+  if(!video.srcObject) return;
+  if(video.readyState < 2) return;
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video,0,0,canvas.width,canvas.height);
+
+  const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+  const code = jsQR(imageData.data,canvas.width,canvas.height);
+
+  if(code) handleScan(code.data);
+}
+
+function renderHistory(rows){
+  historyListEl.innerHTML = '';
+
+  if(!rows.length){
+    historyListEl.innerHTML = '<div class="muted">まだ打刻履歴がありません。</div>';
+    return;
+  }
+
+  rows.forEach(row=>{
+    const card = document.createElement('div');
+    card.className = 'history-card';
+
+    card.innerHTML = `
+      <div class="history-top">
+        <div>${ymdToSlash(row.work_date)}</div>
+        <div>${userName || ''}</div>
+      </div>
+
+      <div class="history-type">${row.work_type || ''}</div>
+
+      <div class="history-grid">
+        <div>
+          <div class="history-row"><div class="history-label">出勤</div><div class="history-box">${timeOnly(row.clock_in)}</div></div>
+          <div class="history-row"><div class="history-label">勤務</div><div class="history-box">${row.work_duration || '0:00'}</div></div>
+        </div>
+        <div>
+          <div class="history-row"><div class="history-label">退勤</div><div class="history-box">${timeOnly(row.clock_out)}</div></div>
+          <div class="history-row"><div class="history-label">休憩</div><div class="history-box">${row.break_duration || '0:00'}</div></div>
+        </div>
+      </div>
+
+      <div class="history-footer">
+        残業申請：${row.overtime_requested_at ? 'あり' : 'なし'}
+      </div>
+
+      <button type="button" class="small-btn" onclick="toggleEdit(${row.id})">編集</button>
+
+      <div class="edit-area" id="edit-${row.id}">
+        <label>勤務形態</label>
+        <input id="edit-work-type-${row.id}" value="${row.work_type || ''}">
+
+        <label>出勤時刻</label>
+        <input id="edit-clock-in-${row.id}" value="${row.clock_in || ''}">
+
+        <label>休憩開始</label>
+        <input id="edit-break-start-${row.id}" value="${row.break_start || ''}">
+
+        <label>休憩終了</label>
+        <input id="edit-break-end-${row.id}" value="${row.break_end || ''}">
+
+        <label>退勤時刻</label>
+        <input id="edit-clock-out-${row.id}" value="${row.clock_out || ''}">
+
+        <label>残業終了予定</label>
+        <input id="edit-overtime-end-${row.id}" value="${row.overtime_planned_end || ''}">
+
+        <label>残業理由</label>
+        <input id="edit-overtime-reason-${row.id}" value="${row.overtime_reason || ''}">
+
+        <label>ヘルプ有無</label>
+        <select id="edit-has-help-${row.id}">
+          <option value="0" ${row.has_help ? '' : 'selected'}>なし</option>
+          <option value="1" ${row.has_help ? 'selected' : ''}>あり</option>
+        </select>
+
+        <label>ヘルプ部署</label>
+        <input id="edit-help-department-${row.id}" value="${row.help_department || ''}">
+
+        <label>ヘルプ時間</label>
+        <input id="edit-help-time-${row.id}" value="${row.help_time || ''}">
+
+        <label>備考</label>
+        <textarea id="edit-remarks-${row.id}" rows="3">${row.remarks || ''}</textarea>
+
+        <button type="button" class="small-btn" onclick="saveEdit('${row.work_date}', ${row.id})">編集内容を保存</button>
+      </div>
+    `;
+
+    historyListEl.appendChild(card);
+  });
+}
+
+function toggleEdit(id){
+  const el = document.getElementById(`edit-${id}`);
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+
+async function saveEdit(workDate, id){
+  const payload = {
+    work_date: workDate,
+    work_type: document.getElementById(`edit-work-type-${id}`).value,
+    clock_in: document.getElementById(`edit-clock-in-${id}`).value,
+    break_start: document.getElementById(`edit-break-start-${id}`).value,
+    break_end: document.getElementById(`edit-break-end-${id}`).value,
+    clock_out: document.getElementById(`edit-clock-out-${id}`).value,
+    overtime_planned_end: document.getElementById(`edit-overtime-end-${id}`).value,
+    overtime_reason: document.getElementById(`edit-overtime-reason-${id}`).value,
+    has_help: document.getElementById(`edit-has-help-${id}`).value === '1',
+    help_department: document.getElementById(`edit-help-department-${id}`).value,
+    help_time: document.getElementById(`edit-help-time-${id}`).value,
+    remarks: document.getElementById(`edit-remarks-${id}`).value
+  };
+
+  const res = await fetch('/api/day-record/update',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+token
+    },
+    body:JSON.stringify(payload)
+  });
+
+  const data = await res.json();
+
+  if(!res.ok){
+    setStatus(data.error || '編集保存に失敗しました', true);
+    return;
+  }
+
+  setStatus('編集内容を保存しました');
+  await loadHistory();
+}
+
+async function loadHistory(){
+  const res = await fetch('/api/my-attendance',{
+    headers:{Authorization:'Bearer '+token}
+  });
+  const data = await res.json();
+  renderHistory(data);
+}
+
+document.getElementById('workDate').value = todayString();
+document.getElementById('startBtn').onclick = startCamera;
+document.getElementById('leaveBtn').onclick = saveLeave;
+document.getElementById('helpSaveBtn').onclick = saveHelpRemarks;
+document.getElementById('overtimeBtn').onclick = submitOvertime;
+
+loadHistory();
+</script>
 </body>
 </html>
