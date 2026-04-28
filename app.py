@@ -13,7 +13,12 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get("DATABASE_URL")
 JWT_SECRET = os.environ.get("JWT_SECRET", "change-this-secret")
 JWT_ALGORITHM = "HS256"
-QR_TEXT = "KUMAMOTO_HIGO"
+
+QR_MAP = {
+    "SUNFARM_KINTAI_HONSHA": "本社",
+    "SUNFARM_KINTAI_FARM": "農場",
+    "SUNFARM_KINTAI_OODU": "大津"
+}
 
 app = Flask(__name__, template_folder="templates")
 
@@ -86,6 +91,8 @@ def init_db():
                 work_date TEXT NOT NULL,
                 type TEXT NOT NULL,
                 timestamp TEXT DEFAULT TO_CHAR(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'),
+                location TEXT,
+                qr_value TEXT,
                 approved INTEGER DEFAULT 0,
                 approved_by INTEGER,
                 approved_at TEXT
@@ -100,6 +107,8 @@ def init_db():
                 user_id INTEGER NOT NULL REFERENCES users(id),
                 work_date TEXT NOT NULL,
                 work_type TEXT,
+                location TEXT,
+                qr_value TEXT,
                 clock_in TEXT,
                 break_start TEXT,
                 break_end TEXT,
@@ -128,11 +137,15 @@ def init_db():
     ensure_column(db, "users", "executive_id", "INTEGER")
 
     ensure_column(db, "attendance", "work_date", "TEXT")
+    ensure_column(db, "attendance", "location", "TEXT")
+    ensure_column(db, "attendance", "qr_value", "TEXT")
     ensure_column(db, "attendance", "approved", "INTEGER DEFAULT 0")
     ensure_column(db, "attendance", "approved_by", "INTEGER")
     ensure_column(db, "attendance", "approved_at", "TEXT")
 
     ensure_column(db, "daily_records", "work_type", "TEXT")
+    ensure_column(db, "daily_records", "location", "TEXT")
+    ensure_column(db, "daily_records", "qr_value", "TEXT")
     ensure_column(db, "daily_records", "clock_in", "TEXT")
     ensure_column(db, "daily_records", "break_start", "TEXT")
     ensure_column(db, "daily_records", "break_end", "TEXT")
@@ -455,7 +468,9 @@ def stamp():
     help_time = (data.get("help_time") or "").strip()
     remarks = (data.get("remarks") or "").strip()
 
-    if qr_value != QR_TEXT:
+    location = QR_MAP.get(qr_value)
+
+    if not location:
         return jsonify({"error": "有効なQRコードではありません"}), 400
 
     field_map = {
@@ -482,10 +497,17 @@ def stamp():
     with db.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO attendance (user_id, work_date, type, timestamp)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO attendance (user_id, work_date, type, timestamp, location, qr_value)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (g.current_user["id"], work_date, stamp_type, ts)
+            (
+                g.current_user["id"],
+                work_date,
+                stamp_type,
+                ts,
+                location,
+                qr_value
+            )
         )
 
         cur.execute(
@@ -493,6 +515,8 @@ def stamp():
             UPDATE daily_records
             SET {field_map[stamp_type]} = %s,
                 work_type = %s,
+                location = %s,
+                qr_value = %s,
                 has_help = %s,
                 help_department = %s,
                 help_time = %s,
@@ -503,6 +527,8 @@ def stamp():
             (
                 ts,
                 final_work_type,
+                location,
+                qr_value,
                 has_help,
                 help_department,
                 help_time,
@@ -529,6 +555,7 @@ def stamp():
         "message": "recorded",
         "type": stamp_type,
         "timestamp": ts,
+        "location": location,
         "daily": build_daily_summary(updated)
     })
 
@@ -759,6 +786,8 @@ def attendance_list():
             u.name AS user_name,
             a.type,
             a.timestamp,
+            a.location,
+            a.qr_value,
             a.approved
         FROM attendance a
         JOIN users u ON u.id = a.user_id

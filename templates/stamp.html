@@ -174,6 +174,18 @@ if (role === 'admin') {
   btn.onclick = () => location.href = '/admin.html';
 }
 
+const validQrList = [
+  'SUNFARM_KINTAI_HONSHA',
+  'SUNFARM_KINTAI_FARM',
+  'SUNFARM_KINTAI_OODU'
+];
+
+const qrLocationMap = {
+  'SUNFARM_KINTAI_HONSHA': '本社',
+  'SUNFARM_KINTAI_FARM': '農場',
+  'SUNFARM_KINTAI_OODU': '大津'
+};
+
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -225,18 +237,18 @@ async function startCamera(){
   const workType = document.getElementById('workType').value;
   const stampType = document.getElementById('stampType').value;
 
-  if(!workType){
-    setStatus('勤務形態を選択してください', true);
-    return;
-  }
-
-  if(isLeaveType(workType)){
-    setStatus('有給・休暇はQR不要です。休暇登録ボタンで保存してください。', true);
-    return;
-  }
-
   if(!stampType){
     setStatus('打刻種別を選択してください', true);
+    return;
+  }
+
+  if(stampType === 'clock_in' && !workType){
+    setStatus('出勤時は勤務形態を選択してください', true);
+    return;
+  }
+
+  if(stampType === 'clock_in' && isLeaveType(workType)){
+    setStatus('有給・休暇はQR不要です。休暇登録ボタンで保存してください。', true);
     return;
   }
 
@@ -285,7 +297,9 @@ async function sendStamp(qrValue){
     clock_out:'退勤'
   };
 
-  setStatus(`${labelMap[data.type]}を記録しました (${timeOnly(data.timestamp)})`);
+  const locationText = data.location ? ` / ${data.location}` : '';
+
+  setStatus(`${labelMap[data.type]}を記録しました (${timeOnly(data.timestamp)})${locationText}`);
   await loadHistory();
 }
 
@@ -373,7 +387,7 @@ async function handleScan(text){
   isScanning = true;
   lastScanTime = Date.now();
 
-  if(text !== 'KUMAMOTO_HIGO'){
+  if(!validQrList.includes(text)){
     setStatus('有効なQRコードではありません', true);
     setTimeout(()=>{isScanning=false},3000);
     return;
@@ -418,13 +432,15 @@ function renderHistory(rows){
     const card = document.createElement('div');
     card.className = 'history-card';
 
+    const locationText = row.location ? `（${row.location}）` : '';
+
     card.innerHTML = `
       <div class="history-top">
         <div>${ymdToSlash(row.work_date)}</div>
         <div>${userName || ''}</div>
       </div>
 
-      <div class="history-type">${row.work_type || ''}</div>
+      <div class="history-type">${row.work_type || ''}${locationText}</div>
 
       <div class="history-grid">
         <div>
