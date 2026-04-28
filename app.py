@@ -1,16 +1,17 @@
 import os
-import sqlite3
 from datetime import datetime, timedelta
 from functools import wraps
 
 import bcrypt
 import jwt
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from flask import Flask, g, jsonify, redirect, render_template, request, send_from_directory
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "attendance.db")
 
-JWT_SECRET = "change-this-secret"
+DATABASE_URL = os.environ.get("DATABASE_URL")
+JWT_SECRET = os.environ.get("JWT_SECRET", "change-this-secret")
 JWT_ALGORITHM = "HS256"
 QR_TEXT = "KUMAMOTO_HIGO"
 
@@ -19,89 +20,134 @@ app = Flask(__name__, template_folder="templates")
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
+        if not DATABASE_URL:
+            raise RuntimeError("DATABASE_URL is not set")
+        g.db = psycopg2.connect(
+            DATABASE_URL,
+            cursor_factory=RealDictCursor
+        )
     return g.db
 
 
 @app.teardown_appcontext
 def close_db(exc):
     db = g.pop("db", None)
-    if db is not None:
+    if db:
         db.close()
 
 
 def ensure_column(db, table_name, column_name, column_type_sql):
-    cols = db.execute(f"PRAGMA table_info({table_name})").fetchall()
-    col_names = [c["name"] for c in cols]
-    if column_name not in col_names:
-        db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type_sql}")
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = %s
+              AND column_name = %s
+            """,
+            (table_name, column_name)
+        )
+        exists = cur.fetchone()
+
+        if not exists:
+            cur.execute(
+                f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type_sql}"
+            )
 
 
 def init_db():
-    db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
-    cur = db.cursor()
+    if not DATABASE_URL:
+        return
 
-    cur.executescript(
-        """
-        PRAGMA foreign_keys = ON;
+    db = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            name TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'employee',
-            manager_id INTEGER,
-            executive_id INTEGER,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                name TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'employee',
+                manager_id INTEGER,
+                executive_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
 
-        CREATE TABLE IF NOT EXISTS attendance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL REFERENCES users(id),
-            work_date TEXT NOT NULL,
-            type TEXT NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            approved INTEGER DEFAULT 0,
-            approved_by INTEGER,
-            approved_at DATETIME
-        );
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS attendance (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                work_date TEXT NOT NULL,
+                type TEXT NOT NULL,
+                timestamp TEXT DEFAULT TO_CHAR(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'),
+                approved INTEGER DEFAULT 0,
+                approved_by INTEGER,
+                approved_at TEXT
+            );
+            """
+        )
 
-        CREATE TABLE IF NOT EXISTS daily_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL REFERENCES users(id),
-            work_date TEXT NOT NULL,
-            work_type TEXT,
-            clock_in TEXT,
-            break_start TEXT,
-            break_end TEXT,
-            clock_out TEXT,
-            overtime_requested_at TEXT,
-            overtime_planned_end TEXT,
-            overtime_reason TEXT,
-            has_help INTEGER DEFAULT 0,
-            help_department TEXT,
-            help_time TEXT,
-            remarks TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(user_id, work_date)
-        );
-        """
-    )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS daily_records (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                work_date TEXT NOT NULL,
+                work_type TEXT,
+                clock_in TEXT,
+                break_start TEXT,
+                break_end TEXT,
+                clock_out TEXT,
+                overtime_requested_at TEXT,
+                overtime_planned_end TEXT,
+                overtime_reason TEXT,
+                has_help INTEGER DEFAULT 0,
+                help_department TEXT,
+                help_time TEXT,
+                remarks TEXT,
+                attendance_manager_approved_by INTEGER,
+                attendance_manager_approved_at TEXT,
+                overtime_manager_approved_by INTEGER,
+                overtime_manager_approved_at TEXT,
+                overtime_executive_approved_by INTEGER,
+                overtime_executive_approved_at TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, work_date)
+            );
+            """
+        )
 
     ensure_column(db, "users", "manager_id", "INTEGER")
     ensure_column(db, "users", "executive_id", "INTEGER")
-    ensure_column(db, "attendance", "work_date", "TEXT")
 
+    ensure_column(db, "attendance", "work_date", "TEXT")
+    ensure_column(db, "attendance", "approved", "INTEGER DEFAULT 0")
+    ensure_column(db, "attendance", "approved_by", "INTEGER")
+    ensure_column(db, "attendance", "approved_at", "TEXT")
+
+    ensure_column(db, "daily_records", "work_type", "TEXT")
+    ensure_column(db, "daily_records", "clock_in", "TEXT")
+    ensure_column(db, "daily_records", "break_start", "TEXT")
+    ensure_column(db, "daily_records", "break_end", "TEXT")
+    ensure_column(db, "daily_records", "clock_out", "TEXT")
+    ensure_column(db, "daily_records", "overtime_requested_at", "TEXT")
+    ensure_column(db, "daily_records", "overtime_planned_end", "TEXT")
+    ensure_column(db, "daily_records", "overtime_reason", "TEXT")
+    ensure_column(db, "daily_records", "has_help", "INTEGER DEFAULT 0")
+    ensure_column(db, "daily_records", "help_department", "TEXT")
+    ensure_column(db, "daily_records", "help_time", "TEXT")
+    ensure_column(db, "daily_records", "remarks", "TEXT")
     ensure_column(db, "daily_records", "attendance_manager_approved_by", "INTEGER")
     ensure_column(db, "daily_records", "attendance_manager_approved_at", "TEXT")
-
     ensure_column(db, "daily_records", "overtime_manager_approved_by", "INTEGER")
     ensure_column(db, "daily_records", "overtime_manager_approved_at", "TEXT")
-
     ensure_column(db, "daily_records", "overtime_executive_approved_by", "INTEGER")
     ensure_column(db, "daily_records", "overtime_executive_approved_at", "TEXT")
 
@@ -132,16 +178,19 @@ def auth_required(roles=None):
                 return jsonify({"error": "Unauthorized"}), 401
 
             token = auth.split(" ", 1)[1]
+
             try:
                 payload = decode_token(token)
             except Exception:
                 return jsonify({"error": "Invalid token"}), 401
 
             db = get_db()
-            user = db.execute(
-                "SELECT * FROM users WHERE id = ?",
-                (payload["user_id"],)
-            ).fetchone()
+            with db.cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM users WHERE id = %s",
+                    (payload["user_id"],)
+                )
+                user = cur.fetchone()
 
             if not user:
                 return jsonify({"error": "User not found"}), 401
@@ -151,6 +200,7 @@ def auth_required(roles=None):
 
             g.current_user = user
             return fn(*args, **kwargs)
+
         return wrapper
     return decorator
 
@@ -193,36 +243,57 @@ def format_minutes(total_minutes):
 
 
 def build_daily_summary(row):
-    break_minutes = minutes_between(row["break_start"], row["break_end"])
-    total_minutes = minutes_between(row["clock_in"], row["clock_out"])
+    if not row:
+        return None
+
+    break_minutes = minutes_between(row.get("break_start"), row.get("break_end"))
+    total_minutes = minutes_between(row.get("clock_in"), row.get("clock_out"))
     work_minutes = max(total_minutes - break_minutes, 0)
 
-    return {
-        **dict(row),
-        "work_duration": format_minutes(work_minutes),
-        "break_duration": format_minutes(break_minutes),
-    }
+    result = dict(row)
+    result["work_duration"] = format_minutes(work_minutes)
+    result["break_duration"] = format_minutes(break_minutes)
+    return result
 
 
 def get_or_create_daily_record(user_id, work_date):
     db = get_db()
-    row = db.execute(
-        "SELECT * FROM daily_records WHERE user_id = ? AND work_date = ?",
-        (user_id, work_date)
-    ).fetchone()
-    if row:
-        return row
 
-    db.execute(
-        "INSERT INTO daily_records (user_id, work_date) VALUES (?, ?)",
-        (user_id, work_date)
-    )
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT *
+            FROM daily_records
+            WHERE user_id = %s AND work_date = %s
+            """,
+            (user_id, work_date)
+        )
+        row = cur.fetchone()
+
+        if row:
+            return row
+
+        cur.execute(
+            """
+            INSERT INTO daily_records (user_id, work_date)
+            VALUES (%s, %s)
+            ON CONFLICT (user_id, work_date) DO NOTHING
+            """,
+            (user_id, work_date)
+        )
+
     db.commit()
 
-    return db.execute(
-        "SELECT * FROM daily_records WHERE user_id = ? AND work_date = ?",
-        (user_id, work_date)
-    ).fetchone()
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT *
+            FROM daily_records
+            WHERE user_id = %s AND work_date = %s
+            """,
+            (user_id, work_date)
+        )
+        return cur.fetchone()
 
 
 @app.route("/")
@@ -236,6 +307,7 @@ def serve_pages(path):
         return render_template(path)
     return send_from_directory(BASE_DIR, path)
 
+
 @app.route("/manifest.json")
 def manifest():
     return send_from_directory(BASE_DIR, "manifest.json")
@@ -245,23 +317,38 @@ def manifest():
 def service_worker():
     return send_from_directory(BASE_DIR, "sw.js")
 
+
 @app.get("/api/register/options")
 def register_options():
     db = get_db()
 
-    managers = db.execute(
-        "SELECT id, name, email FROM users WHERE role IN ('manager', 'admin') ORDER BY name"
-    ).fetchall()
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, name, email
+            FROM users
+            WHERE role IN ('manager', 'admin')
+            ORDER BY name
+            """
+        )
+        managers = cur.fetchall()
 
-    executives = db.execute(
-        "SELECT id, name, email FROM users WHERE role IN ('executive', 'admin') ORDER BY name"
-    ).fetchall()
+        cur.execute(
+            """
+            SELECT id, name, email
+            FROM users
+            WHERE role IN ('executive', 'admin')
+            ORDER BY name
+            """
+        )
+        executives = cur.fetchall()
 
-    user_count = db.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
+        cur.execute("SELECT COUNT(*) AS c FROM users")
+        user_count = cur.fetchone()["c"]
 
     return jsonify({
-        "managers": [dict(r) for r in managers],
-        "executives": [dict(r) for r in executives],
+        "managers": managers,
+        "executives": executives,
         "allow_first_admin": user_count == 0
     })
 
@@ -269,6 +356,7 @@ def register_options():
 @app.post("/api/register")
 def register():
     data = request.get_json(force=True)
+
     name = (data.get("name") or "").strip()
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
@@ -283,40 +371,56 @@ def register():
         return jsonify({"error": "ロールが不正です"}), 400
 
     db = get_db()
-    existing = db.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
-    if existing:
-        return jsonify({"error": "Email already exists"}), 409
 
-    user_count = db.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
-    if user_count > 0 and role == "admin":
-        return jsonify({"error": "最初の1人以外は admin 登録できません"}), 403
+    with db.cursor() as cur:
+        cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+        if cur.fetchone():
+            return jsonify({"error": "Email already exists"}), 409
 
-    pw_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    db.execute(
-        """
-        INSERT INTO users (email, password_hash, name, role, manager_id, executive_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (email, pw_hash, name, role, manager_id, executive_id)
-    )
+        cur.execute("SELECT COUNT(*) AS c FROM users")
+        user_count = cur.fetchone()["c"]
+
+        if user_count > 0 and role == "admin":
+            return jsonify({"error": "最初の1人以外は admin 登録できません"}), 403
+
+        pw_hash = bcrypt.hashpw(
+            password.encode("utf-8"),
+            bcrypt.gensalt()
+        ).decode("utf-8")
+
+        cur.execute(
+            """
+            INSERT INTO users (email, password_hash, name, role, manager_id, executive_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (email, pw_hash, name, role, manager_id, executive_id)
+        )
+
     db.commit()
-
     return jsonify({"message": "registered"}), 201
 
 
 @app.post("/api/login")
 def login():
     data = request.get_json(force=True)
+
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
 
     db = get_db()
-    user = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
 
-    if not user or not bcrypt.checkpw(password.encode("utf-8"), user["password_hash"].encode("utf-8")):
+    with db.cursor() as cur:
+        cur.execute("SELECT * FROM users WHERE email = %s", (email,))
+        user = cur.fetchone()
+
+    if not user or not bcrypt.checkpw(
+        password.encode("utf-8"),
+        user["password_hash"].encode("utf-8")
+    ):
         return jsonify({"error": "メールアドレスまたはパスワードが違います"}), 401
 
     token = make_token(user)
+
     return jsonify({
         "token": token,
         "role": user["role"],
@@ -365,53 +469,61 @@ def stamp():
         return jsonify({"error": "打刻種別が不正です"}), 400
 
     record = get_or_create_daily_record(g.current_user["id"], work_date)
-    existing_work_type = record["work_type"]
+    existing_work_type = record.get("work_type")
 
     if stamp_type == "clock_in" and not work_type and not existing_work_type:
         return jsonify({"error": "出勤時は勤務形態を選択してください"}), 400
 
-    db = get_db()
     ts = combine_work_date_and_now_time(work_date)
-
-    db.execute(
-        """
-        INSERT INTO attendance (user_id, work_date, type, timestamp)
-        VALUES (?, ?, ?, ?)
-        """,
-        (g.current_user["id"], work_date, stamp_type, ts)
-    )
-
     final_work_type = work_type or existing_work_type
 
-    db.execute(
-        f"""
-        UPDATE daily_records
-        SET {field_map[stamp_type]} = ?,
-            work_type = ?,
-            has_help = ?,
-            help_department = ?,
-            help_time = ?,
-            remarks = ?,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = ? AND work_date = ?
-        """,
-        (
-            ts,
-            final_work_type,
-            has_help,
-            help_department,
-            help_time,
-            remarks,
-            g.current_user["id"],
-            work_date
+    db = get_db()
+
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO attendance (user_id, work_date, type, timestamp)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (g.current_user["id"], work_date, stamp_type, ts)
         )
-    )
+
+        cur.execute(
+            f"""
+            UPDATE daily_records
+            SET {field_map[stamp_type]} = %s,
+                work_type = %s,
+                has_help = %s,
+                help_department = %s,
+                help_time = %s,
+                remarks = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = %s AND work_date = %s
+            """,
+            (
+                ts,
+                final_work_type,
+                has_help,
+                help_department,
+                help_time,
+                remarks,
+                g.current_user["id"],
+                work_date
+            )
+        )
+
     db.commit()
 
-    updated = db.execute(
-        "SELECT * FROM daily_records WHERE user_id = ? AND work_date = ?",
-        (g.current_user["id"], work_date)
-    ).fetchone()
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT *
+            FROM daily_records
+            WHERE user_id = %s AND work_date = %s
+            """,
+            (g.current_user["id"], work_date)
+        )
+        updated = cur.fetchone()
 
     return jsonify({
         "message": "recorded",
@@ -425,6 +537,7 @@ def stamp():
 @auth_required()
 def overtime_request():
     data = request.get_json(force=True)
+
     work_date = (data.get("work_date") or today_text()).strip()
     planned_end_time = (data.get("planned_end_time") or "").strip()
     reason = (data.get("reason") or "").strip()
@@ -433,36 +546,46 @@ def overtime_request():
         return jsonify({"error": "終了予定時刻と理由を入力してください"}), 400
 
     get_or_create_daily_record(g.current_user["id"], work_date)
+
     db = get_db()
 
-    db.execute(
-        """
-        UPDATE daily_records
-        SET overtime_requested_at = ?,
-            overtime_planned_end = ?,
-            overtime_reason = ?,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = ? AND work_date = ?
-        """,
-        (
-            now_text(),
-            planned_end_time,
-            reason,
-            g.current_user["id"],
-            work_date
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE daily_records
+            SET overtime_requested_at = %s,
+                overtime_planned_end = %s,
+                overtime_reason = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = %s AND work_date = %s
+            """,
+            (
+                now_text(),
+                planned_end_time,
+                reason,
+                g.current_user["id"],
+                work_date
+            )
         )
-    )
+
     db.commit()
 
-    updated = db.execute(
-        "SELECT * FROM daily_records WHERE user_id = ? AND work_date = ?",
-        (g.current_user["id"], work_date)
-    ).fetchone()
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT *
+            FROM daily_records
+            WHERE user_id = %s AND work_date = %s
+            """,
+            (g.current_user["id"], work_date)
+        )
+        updated = cur.fetchone()
 
     return jsonify({
         "message": "requested",
         "daily": build_daily_summary(updated)
     })
+
 
 @app.post("/api/day-record/update")
 @auth_required()
@@ -486,53 +609,62 @@ def update_day_record():
         return jsonify({"error": "日付を入力してください"}), 400
 
     get_or_create_daily_record(g.current_user["id"], work_date)
+
     db = get_db()
 
-    db.execute(
-        """
-        UPDATE daily_records
-        SET work_type = ?,
-            clock_in = ?,
-            break_start = ?,
-            break_end = ?,
-            clock_out = ?,
-            overtime_planned_end = ?,
-            overtime_reason = ?,
-            has_help = ?,
-            help_department = ?,
-            help_time = ?,
-            remarks = ?,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = ? AND work_date = ?
-        """,
-        (
-            work_type,
-            clock_in or None,
-            break_start or None,
-            break_end or None,
-            clock_out or None,
-            overtime_planned_end,
-            overtime_reason,
-            has_help,
-            help_department,
-            help_time,
-            remarks,
-            g.current_user["id"],
-            work_date,
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE daily_records
+            SET work_type = %s,
+                clock_in = %s,
+                break_start = %s,
+                break_end = %s,
+                clock_out = %s,
+                overtime_planned_end = %s,
+                overtime_reason = %s,
+                has_help = %s,
+                help_department = %s,
+                help_time = %s,
+                remarks = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = %s AND work_date = %s
+            """,
+            (
+                work_type,
+                clock_in or None,
+                break_start or None,
+                break_end or None,
+                clock_out or None,
+                overtime_planned_end,
+                overtime_reason,
+                has_help,
+                help_department,
+                help_time,
+                remarks,
+                g.current_user["id"],
+                work_date,
+            )
         )
-    )
 
     db.commit()
 
-    updated = db.execute(
-        "SELECT * FROM daily_records WHERE user_id = ? AND work_date = ?",
-        (g.current_user["id"], work_date)
-    ).fetchone()
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT *
+            FROM daily_records
+            WHERE user_id = %s AND work_date = %s
+            """,
+            (g.current_user["id"], work_date)
+        )
+        updated = cur.fetchone()
 
     return jsonify({
         "message": "updated",
         "daily": build_daily_summary(updated)
     })
+
 
 @app.post("/api/day-info/save")
 @auth_required()
@@ -550,35 +682,44 @@ def save_day_info():
         return jsonify({"error": "勤務形態を選択してください"}), 400
 
     get_or_create_daily_record(g.current_user["id"], work_date)
+
     db = get_db()
 
-    db.execute(
-        """
-        UPDATE daily_records
-        SET work_type = ?,
-            has_help = ?,
-            help_department = ?,
-            help_time = ?,
-            remarks = ?,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = ? AND work_date = ?
-        """,
-        (
-            work_type,
-            has_help,
-            help_department,
-            help_time,
-            remarks,
-            g.current_user["id"],
-            work_date
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE daily_records
+            SET work_type = %s,
+                has_help = %s,
+                help_department = %s,
+                help_time = %s,
+                remarks = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = %s AND work_date = %s
+            """,
+            (
+                work_type,
+                has_help,
+                help_department,
+                help_time,
+                remarks,
+                g.current_user["id"],
+                work_date
+            )
         )
-    )
+
     db.commit()
 
-    updated = db.execute(
-        "SELECT * FROM daily_records WHERE user_id = ? AND work_date = ?",
-        (g.current_user["id"], work_date)
-    ).fetchone()
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT *
+            FROM daily_records
+            WHERE user_id = %s AND work_date = %s
+            """,
+            (g.current_user["id"], work_date)
+        )
+        updated = cur.fetchone()
 
     return jsonify({
         "message": "saved",
@@ -590,15 +731,18 @@ def save_day_info():
 @auth_required()
 def my_attendance():
     db = get_db()
-    rows = db.execute(
-        """
-        SELECT *
-        FROM daily_records
-        WHERE user_id = ?
-        ORDER BY work_date DESC
-        """,
-        (g.current_user["id"],)
-    ).fetchall()
+
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT *
+            FROM daily_records
+            WHERE user_id = %s
+            ORDER BY work_date DESC
+            """,
+            (g.current_user["id"],)
+        )
+        rows = cur.fetchall()
 
     return jsonify([build_daily_summary(r) for r in rows])
 
@@ -609,7 +753,6 @@ def attendance_list():
     date = request.args.get("date") or today_text()
     name = (request.args.get("name") or "").strip()
 
-    db = get_db()
     sql = """
         SELECT
             a.id,
@@ -619,146 +762,167 @@ def attendance_list():
             a.approved
         FROM attendance a
         JOIN users u ON u.id = a.user_id
-        WHERE a.work_date = ?
+        WHERE a.work_date = %s
     """
     params = [date]
 
     if name:
-        sql += " AND u.name LIKE ?"
+        sql += " AND u.name LIKE %s"
         params.append(f"%{name}%")
 
     sql += " ORDER BY a.timestamp DESC"
 
-    rows = db.execute(sql, params).fetchall()
-    return jsonify([dict(r) for r in rows])
+    db = get_db()
+
+    with db.cursor() as cur:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    return jsonify(rows)
 
 
 @app.post("/api/attendance/approve")
 @auth_required(roles={"admin"})
 def attendance_approve():
     data = request.get_json(force=True)
+
     attendance_id = data.get("id")
     ids = data.get("ids")
 
     db = get_db()
 
-    if attendance_id:
-        db.execute(
-            """
-            UPDATE attendance
-            SET approved = 1,
-                approved_by = ?,
-                approved_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (g.current_user["id"], attendance_id),
-        )
-    elif ids and isinstance(ids, list):
-        placeholders = ",".join(["?"] * len(ids))
-        db.execute(
-            f"""
-            UPDATE attendance
-            SET approved = 1,
-                approved_by = ?,
-                approved_at = CURRENT_TIMESTAMP
-            WHERE id IN ({placeholders})
-            """,
-            [g.current_user["id"], *ids],
-        )
-    else:
-        return jsonify({"error": "id または ids が必要です"}), 400
+    with db.cursor() as cur:
+        if attendance_id:
+            cur.execute(
+                """
+                UPDATE attendance
+                SET approved = 1,
+                    approved_by = %s,
+                    approved_at = %s
+                WHERE id = %s
+                """,
+                (g.current_user["id"], now_text(), attendance_id)
+            )
+        elif ids and isinstance(ids, list):
+            placeholders = ",".join(["%s"] * len(ids))
+            cur.execute(
+                f"""
+                UPDATE attendance
+                SET approved = 1,
+                    approved_by = %s,
+                    approved_at = %s
+                WHERE id IN ({placeholders})
+                """,
+                [g.current_user["id"], now_text(), *ids]
+            )
+        else:
+            return jsonify({"error": "id または ids が必要です"}), 400
 
     db.commit()
     return jsonify({"message": "approved"})
 
-# =========================
-# 承認系API
-# =========================
 
-@app.post('/api/approve/attendance')
-@auth_required(roles={'manager', 'admin'})
+@app.post("/api/approve/attendance")
+@auth_required(roles={"manager", "admin"})
 def approve_attendance():
-    data = request.get_json()
-    record_id = data.get('id')
+    data = request.get_json(force=True)
+    record_id = data.get("id")
 
     db = get_db()
 
-    db.execute('''
-        UPDATE daily_records
-        SET attendance_manager_approved_by = ?,
-            attendance_manager_approved_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-    ''', (g.current_user['id'], record_id))
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE daily_records
+            SET attendance_manager_approved_by = %s,
+                attendance_manager_approved_at = %s
+            WHERE id = %s
+            """,
+            (g.current_user["id"], now_text(), record_id)
+        )
 
     db.commit()
-    return jsonify({'message': 'attendance approved'})
+    return jsonify({"message": "attendance approved"})
 
 
-@app.post('/api/approve/overtime/manager')
-@auth_required(roles={'manager', 'admin'})
+@app.post("/api/approve/overtime/manager")
+@auth_required(roles={"manager", "admin"})
 def approve_overtime_manager():
-    data = request.get_json()
-    record_id = data.get('id')
+    data = request.get_json(force=True)
+    record_id = data.get("id")
 
     db = get_db()
 
-    db.execute('''
-        UPDATE daily_records
-        SET overtime_manager_approved_by = ?,
-            overtime_manager_approved_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-    ''', (g.current_user['id'], record_id))
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE daily_records
+            SET overtime_manager_approved_by = %s,
+                overtime_manager_approved_at = %s
+            WHERE id = %s
+            """,
+            (g.current_user["id"], now_text(), record_id)
+        )
 
     db.commit()
-    return jsonify({'message': 'overtime manager approved'})
+    return jsonify({"message": "overtime manager approved"})
 
-@app.post('/api/approve/overtime/executive')
-@auth_required(roles={'executive', 'admin'})
+
+@app.post("/api/approve/overtime/executive")
+@auth_required(roles={"executive", "admin"})
 def approve_overtime_executive():
-    data = request.get_json()
-    record_id = data.get('id')
+    data = request.get_json(force=True)
+    record_id = data.get("id")
 
     db = get_db()
 
-    db.execute('''
-        UPDATE daily_records
-        SET overtime_executive_approved_by = ?,
-            overtime_executive_approved_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-    ''', (g.current_user['id'], record_id))
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE daily_records
+            SET overtime_executive_approved_by = %s,
+                overtime_executive_approved_at = %s
+            WHERE id = %s
+            """,
+            (g.current_user["id"], now_text(), record_id)
+        )
 
     db.commit()
-    return jsonify({'message': 'overtime executive approved'})
+    return jsonify({"message": "overtime executive approved"})
 
-@app.get('/api/admin/daily')
-@auth_required(roles={'manager','executive','admin'})
+
+@app.get("/api/admin/daily")
+@auth_required(roles={"manager", "executive", "admin"})
 def admin_daily():
-    db = get_db()
+    date = request.args.get("date")
+    name = request.args.get("name")
 
-    date = request.args.get('date')
-    name = request.args.get('name')
-
-    sql = '''
+    sql = """
         SELECT d.*, u.name
         FROM daily_records d
         JOIN users u ON u.id = d.user_id
-        WHERE 1=1
-    '''
+        WHERE 1 = 1
+    """
     params = []
 
     if date:
-        sql += ' AND d.work_date = ?'
+        sql += " AND d.work_date = %s"
         params.append(date)
 
     if name:
-        sql += ' AND u.name LIKE ?'
-        params.append(f'%{name}%')
+        sql += " AND u.name LIKE %s"
+        params.append(f"%{name}%")
 
-    sql += ' ORDER BY d.work_date DESC'
+    sql += " ORDER BY d.work_date DESC"
 
-    rows = db.execute(sql, params).fetchall()
+    db = get_db()
 
-    return jsonify([dict(r) for r in rows])
+    with db.cursor() as cur:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    return jsonify([build_daily_summary(r) for r in rows])
+
 
 init_db()
 
