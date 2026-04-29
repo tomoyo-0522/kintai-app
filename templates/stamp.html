@@ -233,6 +233,10 @@ function setStatus(msg, isError=false){
 }
 
 async function startCamera(){
+isScanning = false;
+lastScanTime = 0;
+stopCamera();
+
   const workType = document.getElementById('workType').value;
   const stampType = document.getElementById('stampType').value;
 
@@ -388,6 +392,7 @@ function stopCamera(){
     stream = null;
   }
   video.srcObject = null;
+  isScanning = false;
 }
 
 async function handleScan(text){
@@ -396,16 +401,18 @@ async function handleScan(text){
 
   if(!validQrList.includes(text)){
     setStatus('有効なQRコードではありません', true);
-    setTimeout(()=>{isScanning=false},3000);
+    stopCamera();
     return;
   }
 
- try{
-  await sendStamp(text);
-  stopCamera();
-}catch(e){
-  setStatus('通信エラーが発生しました', true);
-  console.error(e);
+  try{
+    await sendStamp(text);
+    stopCamera();
+  }catch(e){
+    setStatus('通信エラーが発生しました', true);
+    console.error(e);
+    stopCamera();
+  }
 }
 
 setTimeout(()=>{isScanning=false},3000);
