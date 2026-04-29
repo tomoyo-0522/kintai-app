@@ -382,6 +382,14 @@ async function submitOvertime(){
   await loadHistory();
 }
 
+function stopCamera(){
+  if(stream){
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
+  }
+  video.srcObject = null;
+}
+
 async function handleScan(text){
   isScanning = true;
   lastScanTime = Date.now();
@@ -392,15 +400,15 @@ async function handleScan(text){
     return;
   }
 
-  try{
-    await sendStamp(text);
-  }catch(e){
-    setStatus('通信エラーが発生しました', true);
-    console.error(e);
-  }
-
-  setTimeout(()=>{isScanning=false},3000);
+ try{
+  await sendStamp(text);
+  stopCamera();
+}catch(e){
+  setStatus('通信エラーが発生しました', true);
+  console.error(e);
 }
+
+setTimeout(()=>{isScanning=false},3000);
 
 function scanLoop(){
   requestAnimationFrame(scanLoop);
