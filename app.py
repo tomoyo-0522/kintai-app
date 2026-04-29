@@ -1,5 +1,6 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from functools import wraps
 
 import bcrypt
@@ -13,6 +14,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get("DATABASE_URL")
 JWT_SECRET = os.environ.get("JWT_SECRET", "change-this-secret")
 JWT_ALGORITHM = "HS256"
+JST = ZoneInfo("Asia/Tokyo")
 
 QR_MAP = {
     "SUNFARM_KINTAI_HONSHA": "本社",
@@ -219,15 +221,13 @@ def auth_required(roles=None):
 
 
 def now_text():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
+    return datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
 
 def today_text():
-    return datetime.now().strftime("%Y-%m-%d")
-
+    return datetime.now(JST).strftime("%Y-%m-%d")
 
 def combine_work_date_and_now_time(work_date):
-    current_time = datetime.now().strftime("%H:%M:%S")
+    current_time = datetime.now(JST).strftime("%H:%M:%S")
     return f"{work_date} {current_time}"
 
 
