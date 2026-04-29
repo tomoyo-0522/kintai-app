@@ -94,12 +94,11 @@
       一日勤務・半日勤務はQR読み取りで打刻します。有給・休暇は下の「休暇登録」から保存してください。
     </div>
 
-    <button id="leaveBtn" type="button" class="small-btn">休暇登録（QR不要）</button>
-
     <div style="margin-top:16px;">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="canvas"></canvas>
       <button id="startBtn" type="button" class="small-btn">QR読み取り開始</button>
+      <button id="leaveBtn" type="button" class="small-btn">休暇登録（QR不要）</button>
       <div class="status" id="status">勤務形態と打刻種別を選択してください。</div>
     </div>
   </div>
@@ -464,16 +463,18 @@ function renderHistory(rows){
         <input id="edit-work-type-${row.id}" value="${row.work_type || ''}">
 
         <label>出勤時刻</label>
-        <input id="edit-clock-in-${row.id}" value="${row.clock_in || ''}">
+        <input id="edit-clock-in-${row.id}" 
+  value="${row.clock_in || ''}" 
+  ${row.clock_in ? 'disabled' : ''}>
 
         <label>休憩開始</label>
-        <input id="edit-break-start-${row.id}" value="${row.break_start || ''}">
+       <input id="edit-break-start-${row.id}" value="${row.break_start || ''}" ${row.break_start ? 'disabled' : ''}>
 
         <label>休憩終了</label>
-        <input id="edit-break-end-${row.id}" value="${row.break_end || ''}">
+       <input id="edit-break-end-${row.id}" value="${row.break_end || ''}" ${row.break_end ? 'disabled' : ''}>
 
         <label>退勤時刻</label>
-        <input id="edit-clock-out-${row.id}" value="${row.clock_out || ''}">
+        <input id="edit-clock-out-${row.id}" value="${row.clock_out || ''}" ${row.clock_out ? 'disabled' : ''}>
 
         <label>残業終了予定</label>
         <input id="edit-overtime-end-${row.id}" value="${row.overtime_planned_end || ''}">
