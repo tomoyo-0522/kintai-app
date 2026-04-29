@@ -339,7 +339,7 @@ function resetSearch(){
   load();
 }
 
-function downloadCsv(){
+async function downloadCsv(){
   const month = document.getElementById('csvMonth').value;
   const searchName = document.getElementById('searchName').value.trim();
 
@@ -354,7 +354,28 @@ function downloadCsv(){
     url += `&name=${encodeURIComponent(searchName)}`;
   }
 
-  window.open(url, '_blank');
+  const res = await fetch(url, {
+    headers: {
+      Authorization: 'Bearer ' + token
+    }
+  });
+
+  if(!res.ok){
+    alert('CSV出力に失敗しました');
+    return;
+  }
+
+  const blob = await res.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = `kintai_${month}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  window.URL.revokeObjectURL(downloadUrl);
 }
 
 document.getElementById('searchBtn').onclick = load;

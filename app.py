@@ -959,15 +959,28 @@ def admin_daily():
 @auth_required(roles={"manager", "executive", "admin"})
 def admin_export_csv():
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
-    name = (request.args.get("name") or "").strip()
 
-    sql = """
-        SELECT d.*, u.name
-        FROM daily_records d
-        JOIN users u ON u.id = d.user_id
-        WHERE d.work_date LIKE %s
-    """
-    params = [f"{month}%"]
+year, m = map(int, month.split('-'))
+
+# 当月15日
+end_date = datetime(year, m, 15)
+
+# 前月16日
+if m == 1:
+    start_date = datetime(year-1, 12, 16)
+else:
+    start_date = datetime(year, m-1, 16)
+
+start_str = start_date.strftime("%Y-%m-%d")
+end_str = end_date.strftime("%Y-%m-%d")
+
+sql = """
+    SELECT d.*, u.name
+    FROM daily_records d
+    JOIN users u ON u.id = d.user_id
+    WHERE d.work_date BETWEEN %s AND %s
+"""
+params = [start_str, end_str]
 
     if name:
         sql += " AND u.name LIKE %s"
@@ -1023,7 +1036,7 @@ def admin_export_csv():
         csv_data,
         mimetype="text/csv",
         headers={
-            "Content-Disposition": f"attachment; filename=kintai_{month}.csv"
+            "Content-Disposition": f"attachment; filename=kintai_{start_str}_to_{end_str}.csv"
         }
     )
 
