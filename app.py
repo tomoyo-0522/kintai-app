@@ -955,20 +955,30 @@ def admin_daily():
 
     return jsonify([build_daily_summary(r) for r in rows])
 
+
+    csv_data = "\ufeff" + output.getvalue()
+
+    return app.response_class(
+        csv_data,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=kintai_{start_str}_to_{end_str}.csv"
+        }
+    )
 @app.get("/api/admin/export-csv")
 @auth_required(roles={"manager", "executive", "admin"})
 def admin_export_csv():
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
     name = (request.args.get("name") or "").strip()
 
-    year, m = map(int, month.split('-'))
+    year, m = map(int, month.split("-"))
 
     end_date = datetime(year, m, 15)
 
     if m == 1:
-        start_date = datetime(year-1, 12, 16)
+        start_date = datetime(year - 1, 12, 16)
     else:
-        start_date = datetime(year, m-1, 16)
+        start_date = datetime(year, m - 1, 16)
 
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = end_date.strftime("%Y-%m-%d")
@@ -995,14 +1005,53 @@ def admin_export_csv():
     output = io.StringIO()
     writer = csv.writer(output)
 
-    writer.writerow(["日付","名前","勤務地","勤務形態"])
+    writer.writerow([
+        "日付",
+        "名前",
+        "勤務地",
+        "勤務形態",
+        "出勤時刻",
+        "休憩開始時刻",
+        "休憩終了時刻",
+        "退勤時刻",
+        "勤務時間",
+        "休憩時間",
+        "残業申請日時",
+        "残業終了予定時刻",
+        "残業申請理由",
+        "ヘルプ有無",
+        "ヘルプ部署",
+        "ヘルプ時間",
+        "備考",
+        "勤怠上長承認",
+        "残業上長承認",
+        "残業役員承認"
+    ])
 
     for r in rows:
+        s = build_daily_summary(r)
+
         writer.writerow([
-            r.get("work_date"),
-            r.get("name"),
-            r.get("location"),
-            r.get("work_type")
+            s.get("work_date", ""),
+            s.get("name", ""),
+            s.get("location", ""),
+            s.get("work_type", ""),
+            s.get("clock_in", ""),
+            s.get("break_start", ""),
+            s.get("break_end", ""),
+            s.get("clock_out", ""),
+            s.get("work_duration", ""),
+            s.get("break_duration", ""),
+            s.get("overtime_requested_at", ""),
+            s.get("overtime_planned_end", ""),
+            s.get("overtime_reason", ""),
+            "あり" if s.get("has_help") else "なし",
+            s.get("help_department", ""),
+            s.get("help_time", ""),
+            s.get("remarks", ""),
+            "承認済" if s.get("attendance_manager_approved_at") else "未承認",
+            "承認済" if s.get("overtime_manager_approved_at") else "未承認",
+            "承認済" if s.get("overtime_executive_approved_at") else "未承認"
         ])
 
     csv_data = "\ufeff" + output.getvalue()
@@ -1014,7 +1063,6 @@ def admin_export_csv():
             "Content-Disposition": f"attachment; filename=kintai_{start_str}_to_{end_str}.csv"
         }
     )
-
 
 init_db()
 
