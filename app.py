@@ -483,11 +483,24 @@ def stamp():
         "clock_out": "clock_out"
     }
 
+    label_map = {
+        "clock_in": "出勤",
+        "break_start": "休憩開始",
+        "break_end": "休憩終了",
+        "clock_out": "退勤"
+    }
+
     if stamp_type not in field_map:
         return jsonify({"error": "打刻種別が不正です"}), 400
 
     record = get_or_create_daily_record(g.current_user["id"], work_date)
     existing_work_type = record.get("work_type")
+    target_field = field_map[stamp_type]
+
+    if record.get(target_field):
+        return jsonify({
+            "error": f"{label_map[stamp_type]}は既に登録されています。上書きはできません。"
+        }), 409
 
     if stamp_type == "clock_in" and not work_type and not existing_work_type:
         return jsonify({"error": "出勤時は勤務形態を選択してください"}), 400
@@ -516,7 +529,7 @@ def stamp():
         cur.execute(
             f"""
             UPDATE daily_records
-            SET {field_map[stamp_type]} = %s,
+            SET {target_field} = %s,
                 work_type = %s,
                 location = %s,
                 qr_value = %s,
@@ -561,7 +574,6 @@ def stamp():
         "location": location,
         "daily": build_daily_summary(updated)
     })
-
 
 @app.post("/api/overtime-request")
 @auth_required()
