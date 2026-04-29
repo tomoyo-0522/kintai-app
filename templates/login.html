@@ -61,10 +61,10 @@
     const qs = s => document.querySelector(s);
 
     function saveSession(data){
-      sessionStorage.setItem('token', data.token);
-      sessionStorage.setItem('role', data.role);
-      sessionStorage.setItem('name', data.name);
-      sessionStorage.setItem('userId', data.userId);
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('role', data.role);
+      localStorage.setItem('name', data.name);
+      localStorage.setItem('userId', data.userId);
     }
 
     qs('#loginBtn').onclick = async () => {
@@ -120,8 +120,8 @@
       }
     };
 
-    if(sessionStorage.getItem('token')){
-      const role = sessionStorage.getItem('role');
+    if(localStorage.getItem('token')){
+      const role = localStorage.getItem('role');
       location.href = role === 'admin' ? '/admin.html' : '/stamp.html';
     }
   </script>

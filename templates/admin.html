@@ -80,16 +80,16 @@ button{cursor:pointer;background:#1e66f5;color:#fff;border:none;font-weight:700}
 </div>
 
 <script>
-const token = sessionStorage.getItem('token');
-const role = sessionStorage.getItem('role');
-const name = sessionStorage.getItem('name');
+const token = localStorage.getItem('token');
+const role = localStorage.getItem('role');
+const name = localStorage.getItem('name');
 
 if(!token) location.href='/login.html';
 
 document.getElementById('userInfo').textContent = name || '';
 
 document.getElementById('logoutBtn').onclick = () => {
-  sessionStorage.clear();
+  localStorage.clear();
   location.href='/login.html';
 };
 
