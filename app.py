@@ -959,28 +959,27 @@ def admin_daily():
 @auth_required(roles={"manager", "executive", "admin"})
 def admin_export_csv():
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+    name = (request.args.get("name") or "").strip()
 
-year, m = map(int, month.split('-'))
+    year, m = map(int, month.split('-'))
 
-# 当月15日
-end_date = datetime(year, m, 15)
+    end_date = datetime(year, m, 15)
 
-# 前月16日
-if m == 1:
-    start_date = datetime(year-1, 12, 16)
-else:
-    start_date = datetime(year, m-1, 16)
+    if m == 1:
+        start_date = datetime(year-1, 12, 16)
+    else:
+        start_date = datetime(year, m-1, 16)
 
-start_str = start_date.strftime("%Y-%m-%d")
-end_str = end_date.strftime("%Y-%m-%d")
+    start_str = start_date.strftime("%Y-%m-%d")
+    end_str = end_date.strftime("%Y-%m-%d")
 
-sql = """
-    SELECT d.*, u.name
-    FROM daily_records d
-    JOIN users u ON u.id = d.user_id
-    WHERE d.work_date BETWEEN %s AND %s
-"""
-params = [start_str, end_str]
+    sql = """
+        SELECT d.*, u.name
+        FROM daily_records d
+        JOIN users u ON u.id = d.user_id
+        WHERE d.work_date BETWEEN %s AND %s
+    """
+    params = [start_str, end_str]
 
     if name:
         sql += " AND u.name LIKE %s"
@@ -996,38 +995,14 @@ params = [start_str, end_str]
     output = io.StringIO()
     writer = csv.writer(output)
 
-    writer.writerow([
-        "日付", "名前", "勤務地", "勤務形態",
-        "出勤", "休憩開始", "休憩終了", "退勤",
-        "勤務時間", "休憩時間",
-        "残業申請日時", "残業終了予定", "残業理由",
-        "ヘルプ有無", "ヘルプ部署", "ヘルプ時間", "備考",
-        "勤怠上長承認", "残業上長承認", "残業役員承認"
-    ])
+    writer.writerow(["日付","名前","勤務地","勤務形態"])
 
     for r in rows:
-        s = build_daily_summary(r)
         writer.writerow([
-            s.get("work_date", ""),
-            s.get("name", ""),
-            s.get("location", ""),
-            s.get("work_type", ""),
-            s.get("clock_in", ""),
-            s.get("break_start", ""),
-            s.get("break_end", ""),
-            s.get("clock_out", ""),
-            s.get("work_duration", ""),
-            s.get("break_duration", ""),
-            s.get("overtime_requested_at", ""),
-            s.get("overtime_planned_end", ""),
-            s.get("overtime_reason", ""),
-            "あり" if s.get("has_help") else "なし",
-            s.get("help_department", ""),
-            s.get("help_time", ""),
-            s.get("remarks", ""),
-            "承認済" if s.get("attendance_manager_approved_at") else "未承認",
-            "承認済" if s.get("overtime_manager_approved_at") else "未承認",
-            "承認済" if s.get("overtime_executive_approved_at") else "未承認",
+            r.get("work_date"),
+            r.get("name"),
+            r.get("location"),
+            r.get("work_type")
         ])
 
     csv_data = "\ufeff" + output.getvalue()
