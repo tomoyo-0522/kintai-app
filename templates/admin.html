@@ -57,21 +57,32 @@ button{cursor:pointer;background:#1e66f5;color:#fff;border:none;font-weight:700}
 
 <div class="wrap">
   <div class="search-card">
-    <div class="section-title">検索</div>
-    <div class="grid3">
-      <div>
-        <label>日付</label>
-        <input id="searchDate" type="date">
-      </div>
-      <div>
-        <label>名前</label>
-        <input id="searchName" type="text" placeholder="社員名で検索">
-      </div>
-      <div>
-        <label>&nbsp;</label>
-        <button id="searchBtn" type="button">検索</button>
-      </div>
+  <div class="section-title">検索</div>
+
+  <div class="grid3">
+    <div>
+      <label>日付</label>
+      <input id="searchDate" type="date">
     </div>
+    <div>
+      <label>名前</label>
+      <input id="searchName" type="text" placeholder="社員名で検索">
+    </div>
+    <div>
+      <label>CSV対象月</label>
+      <input id="csvMonth" type="month">
+    </div>
+  </div>
+
+  <div class="grid3" style="margin-top:10px;">
+    <button id="searchBtn" type="button">検索</button>
+    <button id="resetBtn" type="button" style="background:#64748b;">リセット</button>
+    <button id="csvBtn" type="button" style="background:#16a34a;">CSVダウンロード</button>
+  </div>
+
+  <div id="msg" class="muted"></div>
+</div>
+
     <button id="resetBtn" type="button" style="margin-top:10px;background:#64748b;">リセット</button>
     <div id="msg" class="muted"></div>
   </div>
@@ -162,6 +173,9 @@ async function load(){
 
       <div class="block">
         <div class="row"><div class="label">勤務形態</div><div class="value">${r.work_type || ''}</div></div>
+
+<div class="row"><div class="label">勤務地</div><div class="value">${r.location || ''}</div></div>
+
         <div class="grid2">
           <div>
             <div class="row"><div class="label">出勤</div><div class="value">${timeOnly(r.clock_in)}</div></div>
@@ -325,8 +339,28 @@ function resetSearch(){
   load();
 }
 
+function downloadCsv(){
+  const month = document.getElementById('csvMonth').value;
+  const searchName = document.getElementById('searchName').value.trim();
+
+  if(!month){
+    alert('CSV対象月を選択してください');
+    return;
+  }
+
+  let url = `/api/admin/export-csv?month=${encodeURIComponent(month)}`;
+
+  if(searchName){
+    url += `&name=${encodeURIComponent(searchName)}`;
+  }
+
+  window.open(url, '_blank');
+}
+
 document.getElementById('searchBtn').onclick = load;
 document.getElementById('resetBtn').onclick = resetSearch;
+document.getElementById('csvBtn').onclick = downloadCsv;
+document.getElementById('csvMonth').value = new Date().toISOString().slice(0, 7);
 
 load();
 </script>

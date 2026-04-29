@@ -9,6 +9,9 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask import Flask, g, jsonify, redirect, render_template, request, send_from_directory
 
+import csv
+import io
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -951,6 +954,78 @@ def admin_daily():
         rows = cur.fetchall()
 
     return jsonify([build_daily_summary(r) for r in rows])
+
+@app.get("/api/admin/export-csv")
+@auth_required(roles={"manager", "executive", "admin"})
+def admin_export_csv():
+    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+    name = (request.args.get("name") or "").strip()
+
+    sql = """
+        SELECT d.*, u.name
+        FROM daily_records d
+        JOIN users u ON u.id = d.user_id
+        WHERE d.work_date LIKE %s
+    """
+    params = [f"{month}%"]
+
+    if name:
+        sql += " AND u.name LIKE %s"
+        params.append(f"%{name}%")
+
+    sql += " ORDER BY d.work_date ASC, u.name ASC"
+
+    db = get_db()
+    with db.cursor() as cur:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow([
+        "日付", "名前", "勤務地", "勤務形態",
+        "出勤", "休憩開始", "休憩終了", "退勤",
+        "勤務時間", "休憩時間",
+        "残業申請日時", "残業終了予定", "残業理由",
+        "ヘルプ有無", "ヘルプ部署", "ヘルプ時間", "備考",
+        "勤怠上長承認", "残業上長承認", "残業役員承認"
+    ])
+
+    for r in rows:
+        s = build_daily_summary(r)
+        writer.writerow([
+            s.get("work_date", ""),
+            s.get("name", ""),
+            s.get("location", ""),
+            s.get("work_type", ""),
+            s.get("clock_in", ""),
+            s.get("break_start", ""),
+            s.get("break_end", ""),
+            s.get("clock_out", ""),
+            s.get("work_duration", ""),
+            s.get("break_duration", ""),
+            s.get("overtime_requested_at", ""),
+            s.get("overtime_planned_end", ""),
+            s.get("overtime_reason", ""),
+            "あり" if s.get("has_help") else "なし",
+            s.get("help_department", ""),
+            s.get("help_time", ""),
+            s.get("remarks", ""),
+            "承認済" if s.get("attendance_manager_approved_at") else "未承認",
+            "承認済" if s.get("overtime_manager_approved_at") else "未承認",
+            "承認済" if s.get("overtime_executive_approved_at") else "未承認",
+        ])
+
+    csv_data = "\ufeff" + output.getvalue()
+
+    return app.response_class(
+        csv_data,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=kintai_{month}.csv"
+        }
+    )
 
 
 init_db()
