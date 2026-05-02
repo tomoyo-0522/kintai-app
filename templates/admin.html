@@ -74,6 +74,8 @@ button{cursor:pointer;background:#1e66f5;color:#fff;border:none;font-weight:700}
     </div>
   </div>
 
+</div> 
+
   <div class="grid3" style="margin-top:10px;">
     <button id="searchBtn" type="button">検索</button>
     <button id="resetBtn" type="button" style="background:#64748b;">リセット</button>
@@ -81,14 +83,45 @@ button{cursor:pointer;background:#1e66f5;color:#fff;border:none;font-weight:700}
   </div>
 
   <div id="msg" class="muted"></div>
+<div id="list" style="display:grid;gap:14px;"></div>
 </div>
 
-    <button id="resetBtn" type="button" style="margin-top:10px;background:#64748b;">リセット</button>
-    <div id="msg" class="muted"></div>
-  </div>
 
-  <div id="list" style="display:grid;gap:14px;"></div>
+
+<hr style="margin:40px 0;">
+
+<h2>ユーザー管理</h2>
+
+<div class="card">
+  <h3>ユーザー登録</h3>
+
+  <input id="u_name" placeholder="名前"><br><br>
+  <input id="u_email" placeholder="メール"><br><br>
+  <input id="u_password" placeholder="パスワード" type="password"><br><br>
+
+  <select id="u_role">
+    <option value="employee">社員</option>
+    <option value="manager">上長</option>
+    <option value="executive">役員</option>
+    <option value="admin">管理者</option>
+  </select><br><br>
+
+  <select id="u_manager"></select>
+<br><br>
+
+<select id="u_executive"></select>
+<br><br>
+
+  <button onclick="createUser()">登録</button>
 </div>
+
+<div class="card">
+  <h3>ユーザー一覧</h3>
+  <div id="userList"></div>
+</div>
+
+
+  
 
 <script>
 const token = localStorage.getItem('token');
@@ -383,37 +416,11 @@ document.getElementById('resetBtn').onclick = resetSearch;
 document.getElementById('csvBtn').onclick = downloadCsv;
 document.getElementById('csvMonth').value = new Date().toISOString().slice(0, 7);
 
-await load();
-loadUsers();
-
-<hr style="margin:40px 0;">
-
-<h2>ユーザー管理</h2>
-
-<div class="card">
-  <h3>ユーザー登録</h3>
-
-  <input id="u_name" placeholder="名前"><br><br>
-  <input id="u_email" placeholder="メール"><br><br>
-  <input id="u_password" placeholder="パスワード" type="password"><br><br>
-
-  <select id="u_role">
-    <option value="employee">社員</option>
-    <option value="manager">上長</option>
-    <option value="executive">役員</option>
-    <option value="admin">管理者</option>
-  </select><br><br>
-
-  <input id="u_manager" placeholder="上長ID"><br><br>
-  <input id="u_executive" placeholder="役員ID"><br><br>
-
-  <button onclick="createUser()">登録</button>
-</div>
-
-<div class="card">
-  <h3>ユーザー一覧</h3>
-  <div id="userList"></div>
-</div>
+window.addEventListener('DOMContentLoaded', () => {
+  load();
+  loadUsers();
+  loadUserOptions();
+});
 
 async function loadUsers(){
   if(!token) return;  // ← これ追加（超重要）
@@ -446,6 +453,25 @@ async function loadUsers(){
     `;
 
     list.appendChild(div);
+  });
+}
+
+async function loadUserOptions(){
+  const res = await fetch('/api/register/options');
+  const data = await res.json();
+
+  const managerSelect = document.getElementById('u_manager');
+  const execSelect = document.getElementById('u_executive');
+
+  managerSelect.innerHTML = '<option value="">なし</option>';
+  execSelect.innerHTML = '<option value="">なし</option>';
+
+  data.managers.forEach(m => {
+    managerSelect.innerHTML += `<option value="${m.id}">${m.name}</option>`;
+  });
+
+  data.executives.forEach(e => {
+    execSelect.innerHTML += `<option value="${e.id}">${e.name}</option>`;
   });
 }
 
@@ -493,5 +519,6 @@ async function deleteUser(id){
 }
 
 </script>
+
 </body>
 </html>
