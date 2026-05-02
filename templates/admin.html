@@ -384,6 +384,105 @@ document.getElementById('csvBtn').onclick = downloadCsv;
 document.getElementById('csvMonth').value = new Date().toISOString().slice(0, 7);
 
 load();
+loadUsers();
+
+<hr style="margin:40px 0;">
+
+<h2>ユーザー管理</h2>
+
+<div class="card">
+  <h3>ユーザー登録</h3>
+
+  <input id="u_name" placeholder="名前"><br><br>
+  <input id="u_email" placeholder="メール"><br><br>
+  <input id="u_password" placeholder="パスワード" type="password"><br><br>
+
+  <select id="u_role">
+    <option value="employee">社員</option>
+    <option value="manager">上長</option>
+    <option value="executive">役員</option>
+    <option value="admin">管理者</option>
+  </select><br><br>
+
+  <input id="u_manager" placeholder="上長ID"><br><br>
+  <input id="u_executive" placeholder="役員ID"><br><br>
+
+  <button onclick="createUser()">登録</button>
+</div>
+
+<div class="card">
+  <h3>ユーザー一覧</h3>
+  <div id="userList"></div>
+</div>
+
+async function loadUsers(){
+  const res = await fetch('/api/admin/users', {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+
+  const users = await res.json();
+
+  const list = document.getElementById('userList');
+  list.innerHTML = '';
+
+  users.forEach(u => {
+    const div = document.createElement('div');
+    div.className = 'card';
+
+    div.innerHTML = `
+      <b>${u.name}</b> (${u.role})<br>
+      ${u.email}<br>
+      上長: ${u.manager_name || '-'} / 役員: ${u.executive_name || '-'}<br>
+      <button onclick="deleteUser(${u.id})" style="background:red;">削除</button>
+    `;
+
+    list.appendChild(div);
+  });
+}
+
+async function createUser(){
+  const res = await fetch('/api/admin/users', {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      Authorization:'Bearer ' + token
+    },
+    body:JSON.stringify({
+      name:document.getElementById('u_name').value,
+      email:document.getElementById('u_email').value,
+      password:document.getElementById('u_password').value,
+      role:document.getElementById('u_role').value,
+      manager_id:document.getElementById('u_manager').value || null,
+      executive_id:document.getElementById('u_executive').value || null
+    })
+  });
+
+  if(res.ok){
+    alert('登録成功');
+    loadUsers();
+  }else{
+    alert('登録失敗');
+  }
+}
+
+async function deleteUser(id){
+  if(!confirm('削除しますか？')) return;
+
+  const res = await fetch('/api/admin/users/' + id, {
+    method:'DELETE',
+    headers:{ Authorization:'Bearer ' + token }
+  });
+
+  const data = await res.json();
+
+  if(!res.ok){
+    alert(data.error);
+    return;
+  }
+
+  loadUsers();
+}
+
 </script>
 </body>
 </html>

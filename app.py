@@ -875,19 +875,28 @@ def approve_attendance():
     db = get_db()
 
     with db.cursor() as cur:
-        cur.execute(
-            """
+        # 対象レコード取得
+        cur.execute("SELECT * FROM daily_records WHERE id = %s", (record_id,))
+        record = cur.fetchone()
+
+        # 対象ユーザー取得
+        cur.execute("SELECT * FROM users WHERE id = %s", (record["user_id"],))
+        user = cur.fetchone()
+
+        # 権限チェック
+        if g.current_user["role"] == "manager":
+            if user["manager_id"] != g.current_user["id"]:
+                return jsonify({"error": "権限がありません"}), 403
+
+        cur.execute("""
             UPDATE daily_records
             SET attendance_manager_approved_by = %s,
                 attendance_manager_approved_at = %s
             WHERE id = %s
-            """,
-            (g.current_user["id"], now_text(), record_id)
-        )
+        """, (g.current_user["id"], now_text(), record_id))
 
     db.commit()
     return jsonify({"message": "attendance approved"})
-
 
 @app.post("/api/approve/overtime/manager")
 @auth_required(roles={"manager", "admin"})
@@ -898,19 +907,25 @@ def approve_overtime_manager():
     db = get_db()
 
     with db.cursor() as cur:
-        cur.execute(
-            """
+        cur.execute("SELECT * FROM daily_records WHERE id = %s", (record_id,))
+        record = cur.fetchone()
+
+        cur.execute("SELECT * FROM users WHERE id = %s", (record["user_id"],))
+        user = cur.fetchone()
+
+        if g.current_user["role"] == "manager":
+            if user["manager_id"] != g.current_user["id"]:
+                return jsonify({"error": "権限がありません"}), 403
+
+        cur.execute("""
             UPDATE daily_records
             SET overtime_manager_approved_by = %s,
                 overtime_manager_approved_at = %s
             WHERE id = %s
-            """,
-            (g.current_user["id"], now_text(), record_id)
-        )
+        """, (g.current_user["id"], now_text(), record_id))
 
     db.commit()
     return jsonify({"message": "overtime manager approved"})
-
 
 @app.post("/api/approve/overtime/executive")
 @auth_required(roles={"executive", "admin"})
@@ -921,19 +936,25 @@ def approve_overtime_executive():
     db = get_db()
 
     with db.cursor() as cur:
-        cur.execute(
-            """
+        cur.execute("SELECT * FROM daily_records WHERE id = %s", (record_id,))
+        record = cur.fetchone()
+
+        cur.execute("SELECT * FROM users WHERE id = %s", (record["user_id"],))
+        user = cur.fetchone()
+
+        if g.current_user["role"] == "executive":
+            if user["executive_id"] != g.current_user["id"]:
+                return jsonify({"error": "権限がありません"}), 403
+
+        cur.execute("""
             UPDATE daily_records
             SET overtime_executive_approved_by = %s,
                 overtime_executive_approved_at = %s
             WHERE id = %s
-            """,
-            (g.current_user["id"], now_text(), record_id)
-        )
+        """, (g.current_user["id"], now_text(), record_id))
 
     db.commit()
     return jsonify({"message": "overtime executive approved"})
-
 
 @app.get("/api/admin/daily")
 @auth_required(roles={"manager", "executive", "admin"})
@@ -968,15 +989,6 @@ def admin_daily():
     return jsonify([build_daily_summary(r) for r in rows])
 
 
-    csv_data = "\ufeff" + output.getvalue()
-
-    return app.response_class(
-        csv_data,
-        mimetype="text/csv",
-        headers={
-            "Content-Disposition": f"attachment; filename=kintai_{start_str}_to_{end_str}.csv"
-        }
-    )
 @app.get("/api/admin/export-csv")
 @auth_required(roles={"manager", "executive", "admin"})
 def admin_export_csv():
@@ -1075,6 +1087,90 @@ def admin_export_csv():
             "Content-Disposition": f"attachment; filename=kintai_{start_str}_to_{end_str}.csv"
         }
     )
+
+@app.get("/api/admin/users")
+@auth_required(roles={"admin"})
+def admin_users():
+    db = get_db()
+
+    with db.cursor() as cur:
+        cur.execute("""
+            SELECT 
+                u.id, u.name, u.email, u.role,
+                m.name AS manager_name,
+                e.name AS executive_name
+            FROM users u
+            LEFT JOIN users m ON u.manager_id = m.id
+            LEFT JOIN users e ON u.executive_id = e.id
+            ORDER BY u.id
+        """)
+        users = cur.fetchall()
+
+    return jsonify(users)
+
+
+@app.post("/api/admin/users")
+@auth_required(roles={"admin"})
+def admin_create_user():
+    data = request.get_json(force=True)
+
+    name = data.get("name")
+    email = data.get("email")
+    password = data.get("password")
+    role = data.get("role")
+    manager_id = data.get("manager_id")
+    executive_id = data.get("executive_id")
+
+    if not name or not email or not password:
+        return jsonify({"error": "必須項目です"}), 400
+
+    db = get_db()
+
+    with db.cursor() as cur:
+        pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+        cur.execute("""
+            INSERT INTO users (name, email, password_hash, role, manager_id, executive_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (name, email, pw_hash, role, manager_id, executive_id))
+
+    db.commit()
+    return jsonify({"message": "created"})
+
+@app.delete("/api/admin/users/<int:user_id>")
+@auth_required(roles={"admin"})
+def admin_delete_user(user_id):
+    db = get_db()
+
+    with db.cursor() as cur:
+        # 自分削除禁止
+        if user_id == g.current_user["id"]:
+            return jsonify({"error": "自分自身は削除できません"}), 400
+
+        # 紐づきチェック（上長・役員）
+        cur.execute("""
+            SELECT COUNT(*) AS c FROM users
+            WHERE manager_id = %s OR executive_id = %s
+        """, (user_id, user_id))
+        linked = cur.fetchone()["c"]
+
+        if linked > 0:
+            return jsonify({"error": "他ユーザーに割り当てられているため削除できません"}), 400
+
+        # 勤怠データチェック
+        cur.execute("""
+            SELECT COUNT(*) AS c FROM daily_records
+            WHERE user_id = %s
+        """, (user_id,))
+        has_data = cur.fetchone()["c"]
+
+        if has_data > 0:
+            return jsonify({"error": "勤怠データがあるため削除できません"}), 400
+
+        cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+
+    db.commit()
+    return jsonify({"message": "deleted"})
 
 init_db()
 
