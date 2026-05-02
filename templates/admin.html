@@ -383,7 +383,7 @@ document.getElementById('resetBtn').onclick = resetSearch;
 document.getElementById('csvBtn').onclick = downloadCsv;
 document.getElementById('csvMonth').value = new Date().toISOString().slice(0, 7);
 
-load();
+await load();
 loadUsers();
 
 <hr style="margin:40px 0;">
@@ -416,13 +416,22 @@ loadUsers();
 </div>
 
 async function loadUsers(){
+  if(!token) return;  // ← これ追加（超重要）
+
   const res = await fetch('/api/admin/users', {
     headers: { Authorization: 'Bearer ' + token }
   });
 
+  if(!res.ok){
+    console.log('ユーザー取得失敗');
+    return;
+  }
+
   const users = await res.json();
 
   const list = document.getElementById('userList');
+  if(!list) return;
+
   list.innerHTML = '';
 
   users.forEach(u => {
