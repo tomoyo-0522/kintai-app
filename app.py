@@ -177,23 +177,37 @@ def init_db():
     db.commit()
     db.close()
 
-
 def sync_to_google_sheet_async(data):
-    """スプレッドシートに1行追加する（バックグラウンド実行用）"""
     try:
-        # 合鍵（JSON）の場所を指定
-        json_path = os.path.join(BASE_DIR, "credentials.json")
+        import json
+        import os
+        from oauth2client.service_account import ServiceAccountCredentials
+        import gspread
+
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_name(json_path, scope)
+        
+        # 強制的に環境変数をチェック
+        creds_json = os.environ.get("GOOGLE_CREDENTIALS")
+        
+        if creds_json:
+            # 環境変数がある場合は、文字列を辞書に変換して使用
+            print("Using environment variable for credentials...")
+            creds_dict = json.loads(creds_json)
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        else:
+            # 環境変数がない場合のみ、ファイルを探す
+            print("Environment variable not found. Looking for file...")
+            json_path = os.path.join(os.path.dirname(__file__), "credentials.json")
+            creds = ServiceAccountCredentials.from_json_keyfile_name(json_path, scope)
+
         client = gspread.authorize(creds)
-        
-        # スプレッドシート名。ご自身で作った名前に変えてください
         sheet = client.open("勤怠バックアップ").sheet1
-        
-        # データを1行追加
         sheet.append_row(data)
+        print("Successfully synced to Google Sheets!")
+        
     except Exception as e:
         print(f"Google Sheet Sync Error: {e}")
+
 
 def sync_to_sheet(data):
     """ユーザーを待たせないように別スレッドで実行する"""
