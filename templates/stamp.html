@@ -363,33 +363,50 @@ async function saveLeave(){
   await saveDayInfo('休暇情報を保存しました');
 }
 
+// 「ヘルプ・備考を保存」ボタンの処理を修正
 async function saveHelpRemarks(){
-  const workType = document.getElementById('workType').value;
+  const payload = {
+    ...getBasePayload(),
+    type: "ヘルプ備考", // Python側の mode == "ヘルプ備考" に対応
+    // 入力欄の値を取得してセット
+    help_department: document.getElementById('helpDepartment').value,
+    help_time: document.getElementById('helpTime').value,
+    remarks: document.getElementById('remarks').value
+  };
 
-  if(workType === '一日勤務' || workType === '半日勤務'){
-    setStatus('一日勤務・半日勤務は出勤QR打刻時に勤務形態を保存してください', true);
-    return;
-  }
+  setStatus('保存中...');
 
-  await saveDayInfo('ヘルプ・備考を保存しました');
-}
-
-async function submitOvertime(){
-  const workDate = document.getElementById('workDate').value;
-  const plannedEndTime = document.getElementById('plannedEndTime').value.trim();
-  const overtimeReason = document.getElementById('overtimeReason').value.trim();
-
-  const res = await apiFetch('/api/overtime-request',{
-    method:'POST',
-    body:JSON.stringify({
-      work_date: workDate,
-      planned_end_time: plannedEndTime,
-      reason: overtimeReason
-    })
+  const res = await apiFetch('/api/stamp', { // 打刻と同じ窓口を使う
+    method: 'POST',
+    body: JSON.stringify(payload)
   });
 
   const data = await res.json();
 
+  if (!res.ok) {
+    setStatus(data.error || '保存に失敗しました', true);
+    return;
+  }
+
+  setStatus('ヘルプ・備考を保存しました');
+  await loadHistory();
+}
+
+// 念のため、残業申請ボタンも「同じ行」に行くように窓口を統一
+async function submitOvertime(){
+  const payload = {
+    ...getBasePayload(),
+    type: "残業申請", // Python側の mode == "残業申請" に対応
+    planned_end_time: document.getElementById('plannedEndTime').value.trim(),
+    reason: document.getElementById('overtimeReason').value.trim()
+  };
+
+  const res = await apiFetch('/api/stamp', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+
+  const data = await res.json();
   if(!res.ok){
     setStatus(data.error || '残業申請に失敗しました', true);
     return;
