@@ -178,7 +178,7 @@ def init_db():
     db.close()
 
 def sync_to_google_sheet_async(data):
-    print(f"DEBUG: Sync started with data: {data}") # これがログに出るか確認
+    # dataの想定: [氏名, 年月日, 区分, 時刻, 理由/場所など...]
     try:
         import json
         import os
@@ -187,23 +187,65 @@ def sync_to_google_sheet_async(data):
 
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds_json = os.environ.get("GOOGLE_CREDENTIALS")
-        
-        if not creds_json:
-            print("DEBUG: GOOGLE_CREDENTIALS variable is EMPTY!")
-            return
+        if not creds_json: return
 
         creds_dict = json.loads(creds_json)
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        
-        # スプレッドシートを開く直前でログを出す
-        print("DEBUG: Attempting to open spreadsheet '勤怠バックアップ'...")
         sheet = client.open("勤怠バックアップ").sheet1
-        sheet.append_row(data)
-        print("DEBUG: Sync SUCCESSFUL!")
+
+        all_records = sheet.get_all_values()
+        target_row_index = -1
         
+        # A列(氏名)とB列(年月日)で一致する行を探す
+        search_name = data[0]
+        search_date = data[1]
+        
+        for i, row in enumerate(all_records):
+            if len(row) >= 2:
+                if row[0] == search_name and row[1] == search_date:
+                    target_row_index = i + 1
+                    break
+
+        # 区分(data[2])に応じて書き込む列を決める
+        mode = data[2]
+        timestamp = data[3] # 打刻時刻
+
+        if target_row_index == -1:
+            # 新規行作成（まだその日の行がない場合）
+            # A:氏名, B:年月日 を埋めて作成
+            new_row = [""] * 13 # A-M列分
+            new_row[0] = search_name
+            new_row[1] = search_date
+            sheet.append_row(new_row)
+            # 追加した直後の行番号を取得
+            target_row_index = len(all_records) + 1
+
+        # 各ボタンに応じた列への書き込み
+        if mode == "出勤":
+            sheet.update_cell(target_row_index, 3, timestamp) # C列
+        elif mode == "休憩開始":
+            sheet.update_cell(target_row_index, 4, timestamp) # D列
+        elif mode == "休憩終了":
+            sheet.update_cell(target_row_index, 5, timestamp) # E列
+        elif mode == "退勤":
+            sheet.update_cell(target_row_index, 6, timestamp) # F列
+        elif mode == "残業申請":
+            # G:申請日時, H:終了予定, I:理由
+            sheet.update_cell(target_row_index, 7, timestamp) 
+            sheet.update_cell(target_row_index, 8, data[4]) # 終了予定
+            sheet.update_cell(target_row_index, 9, data[5]) # 理由
+        elif mode == "ヘルプ備考":
+            # J:有無, K:部署, L:時間, M:備考
+            sheet.update_cell(target_row_index, 10, "あり")
+            sheet.update_cell(target_row_index, 11, data[4]) # 部署
+            sheet.update_cell(target_row_index, 12, data[5]) # 時間
+            sheet.update_cell(target_row_index, 13, data[6]) # 備考
+
+        print(f"DEBUG: {mode} updated for row {target_row_index}")
+
     except Exception as e:
-        print(f"DEBUG: Google Sheet Sync ERROR: {e}")
+        print(f"DEBUG: Update Error: {e}")
 
 def sync_to_sheet(data):
     """ユーザーを待たせないように別スレッドで実行する"""
@@ -594,16 +636,20 @@ def stamp():
 
     # --- ここから追加 ---
     # スプレッドシートに送るデータの中身を作る
+    db.commit()
+
+    # --- ここから修正（データの並び順をA〜M列に合わせる） ---
     sync_data = [
-        work_date,
-        g.current_user["name"],
-        location,
-        label_map[stamp_type], # 「出勤」などの日本語名
-        ts,                    # 打刻日時
-        remarks                # 備考
+        g.current_user["name"],    # [0] A列: 氏名
+        work_date,                 # [1] B列: 年月日
+        label_map[stamp_type],     # [2] 区分 (出勤・休憩などの判定用)
+        ts,                        # [3] C〜F列: 打刻時刻
+        "",                        # [4] H列用 (空)
+        "",                        # [5] I列用 (空)
+        remarks                    # [6] M列: 備考
     ]
-    # スプレッドシートへ送信実行！
     sync_to_sheet(sync_data)
+    # --- ここまで修正 ---
     # --- ここまで追加 ---
 
     with db.cursor() as cur:
@@ -662,17 +708,20 @@ def overtime_request():
 
     db.commit()
 
-    # --- ここから追加 ---
+    db.commit()
+
+    # --- ここから修正 ---
     sync_data = [
-        work_date,
-        g.current_user["name"],
-        "残業申請",
-        f"終了予定: {planned_end_time}",
-        now_text(),
-        f"理由: {reason}"
+        g.current_user["name"],    # [0] A列: 氏名
+        work_date,                 # [1] B列: 年月日
+        "残業申請",                 # [2] 区分判定用
+        now_text(),                # [3] G列: 申請日時
+        planned_end_time,          # [4] H列: 終了予定時刻
+        reason,                    # [5] I列: 理由
+        ""                         # [6] M列: 備考
     ]
     sync_to_sheet(sync_data)
-    # --- ここまで追加 ---
+    # --- ここまで修正 ---
 
     with db.cursor() as cur:
         cur.execute(
