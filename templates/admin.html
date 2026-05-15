@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理画面</title>
+
+<style>
+body{font-family:sans-serif;background:#f6f8fb;margin:0}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px;background:#1e66f5;color:#fff;gap:10px}
+.header-right{display:flex;gap:10px;align-items:center}
+.wrap{max-width:1100px;margin:20px auto;padding:16px;display:grid;gap:16px}
+.card{background:#74a7db;color:#fff;border-radius:18px;padding:18px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.search-card{background:#fff;color:#000;border-radius:16px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+input,button{width:100%;min-height:44px;padding:10px 14px;border-radius:12px;border:1px solid #ccd3df;box-sizing:border-box;font-size:16px}
+button{cursor:pointer;background:#1e66f5;color:#fff;border:none;font-weight:700}
+.secondary{background:#fff;color:#1e66f5;border:1px solid #cbd5e1;width:auto}
+.section-title{font-size:18px;font-weight:700;margin-bottom:12px}
+.top{display:flex;justify-content:space-between;gap:10px;font-size:20px;font-weight:700;margin-bottom:12px}
+.block{background:#e9ecef;color:#000;border-radius:10px;padding:12px;margin-top:12px}
+.row{display:flex;justify-content:space-between;gap:10px;margin:8px 0}
+.label{font-weight:700}
+.value{font-weight:700}
+.status-ok{color:#15803d;font-weight:700}
+.status-ng{color:#dc2626;font-weight:700}
+.switch-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px}
+.switch{position:relative;display:inline-block;width:58px;height:32px;flex:0 0 auto}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#cbd5e1;transition:.2s;border-radius:999px}
+.slider:before{position:absolute;content:"";height:24px;width:24px;left:4px;bottom:4px;background:white;transition:.2s;border-radius:50%}
+.switch input:checked + .slider{background:#16a34a}
+.switch input:checked + .slider:before{transform:translateX(26px)}
+.switch input:disabled + .slider{opacity:.6;cursor:not-allowed}
+.muted{font-size:13px;color:#555;margin-top:8px}
+.notice{font-size:13px;margin-top:8px;color:#333}
+@media(max-width:850px){
+  .grid2,.grid3{grid-template-columns:1fr}
+  .top{flex-direction:column;font-size:18px}
+  header{align-items:flex-start}
+}
+</style>
+</head>
+
+<body>
+<header>
+  <div>
+    <strong>管理画面</strong>
+    <div id="userInfo"></div>
+  </div>
+  <div class="header-right">
+    <button id="stampBtn" type="button" class="secondary">打刻画面</button>
+    <button id="logoutBtn" type="button" class="secondary">ログアウト</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="search-card">
+  <div class="section-title">検索</div>
+
+  <div class="grid3">
+    <div>
+      <label>日付</label>
+      <input id="searchDate" type="date">
+    </div>
+    <div>
+      <label>名前</label>
+      <input id="searchName" type="text" placeholder="社員名で検索">
+    </div>
+    <div>
+      <label>CSV対象月</label>
+      <input id="csvMonth" type="month">
+    </div>
+  </div>
+
+</div> 
+
+  <div class="grid3" style="margin-top:10px;">
+    <button id="searchBtn" type="button">検索</button>
+    <button id="resetBtn" type="button" style="background:#64748b;">リセット</button>
+    <button id="csvBtn" type="button" style="background:#16a34a;">CSVダウンロード</button>
+  </div>
+
+  <div id="msg" class="muted"></div>
+<div id="list" style="display:grid;gap:14px;"></div>
+</div>
+
+
+
+<hr style="margin:40px 0;">
+
+<h2>ユーザー管理</h2>
+
+<div class="card">
+  <h3>ユーザー登録</h3>
+
+  <input id="u_name" placeholder="名前"><br><br>
+  <input id="u_email" placeholder="メール"><br><br>
+  <input id="u_password" placeholder="パスワード" type="password"><br><br>
+
+  <select id="u_role">
+    <option value="employee">社員</option>
+    <option value="manager">上長</option>
+    <option value="executive">役員</option>
+    <option value="admin">管理者</option>
+  </select><br><br>
+
+  <select id="u_manager"></select>
+<br><br>
+
+<select id="u_executive"></select>
+<br><br>
+
+  <button onclick="createUser()">登録</button>
+</div>
+
+<div class="card">
+  <h3>ユーザー一覧</h3>
+  <div id="userList"></div>
+</div>
+
+
+  
+
+<script>
+async function apiFetch(url, options = {}){
+  const token = localStorage.getItem('token');
+
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: 'Bearer ' + token
+    }
+  });
+
+  // 🔥 自動ログアウト処理
+  if(res.status === 401){
+    alert('ログインが切れました');
+    localStorage.clear();
+    location.href = '/login.html';
+    throw new Error('Unauthorized');
+  }
+
+  return res;
+}
+
+
+const token = localStorage.getItem('token');
+const role = localStorage.getItem('role');
+const name = localStorage.getItem('name');
+
+if(!token) location.href='/login.html';
+
+document.getElementById('userInfo').textContent = name || '';
+
+document.getElementById('logoutBtn').onclick = () => {
+  localStorage.clear();
+  location.href='/login.html';
+};
+
+document.getElementById('stampBtn').onclick = () => {
+  location.href='/stamp.html';
+};
+
+function ymdToSlash(v){
+  return v ? String(v).replaceAll('-','/') : '';
+}
+
+function timeOnly(v){
+  if(!v) return '0:00';
+  const s = String(v);
+  const parts = s.split(' ');
+  if(parts.length >= 2) return parts[1].slice(0,5);
+  return s.slice(0,5) || '0:00';
+}
+
+function yesNo(v){
+  return v ? 'あり' : 'なし';
+}
+
+function approvedText(v){
+  return v ? '<span class="status-ok">承認済</span>' : '<span class="status-ng">未承認</span>';
+}
+
+async function load(){
+  const date = document.getElementById('searchDate').value;
+  const searchName = document.getElementById('searchName').value.trim();
+
+  let url = '/api/admin/daily?';
+  if(date) url += `date=${encodeURIComponent(date)}&`;
+  if(searchName) url += `name=${encodeURIComponent(searchName)}`;
+
+  const msg = document.getElementById('msg');
+  const list = document.getElementById('list');
+
+  msg.textContent = '読み込み中...';
+  list.innerHTML = '';
+
+  const res = await apiFetch(url);
+  const data = await res.json();
+
+  if(!res.ok){
+    msg.textContent = data.error || '取得に失敗しました';
+    return;
+  }
+
+  if(!data.length){
+    msg.textContent = '0件表示';
+    list.innerHTML = '<div class="search-card muted">該当するデータがありません。</div>';
+    return;
+  }
+
+  data.forEach(r => {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const overtimeExists = !!r.overtime_requested_at;
+
+    card.innerHTML = `
+      <div class="top">
+        <div>${ymdToSlash(r.work_date)}</div>
+        <div>${r.name || ''}</div>
+      </div>
+
+      <div class="block">
+        <div class="row"><div class="label">勤務形態</div><div class="value">${r.work_type || ''}</div></div>
+
+<div class="row"><div class="label">勤務地</div><div class="value">${r.location || ''}</div></div>
+
+        <div class="grid2">
+          <div>
+            <div class="row"><div class="label">出勤</div><div class="value">${timeOnly(r.clock_in)}</div></div>
+            <div class="row"><div class="label">休憩開始</div><div class="value">${timeOnly(r.break_start)}</div></div>
+            <div class="row"><div class="label">休憩終了</div><div class="value">${timeOnly(r.break_end)}</div></div>
+          </div>
+          <div>
+            <div class="row"><div class="label">退勤</div><div class="value">${timeOnly(r.clock_out)}</div></div>
+            <div class="row"><div class="label">勤務時間</div><div class="value">${r.work_duration || '0:00'}</div></div>
+            <div class="row"><div class="label">休憩時間</div><div class="value">${r.break_duration || '0:00'}</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="row"><div class="label">残業申請</div><div class="value">${overtimeExists ? 'あり' : 'なし'}</div></div>
+        <div class="row"><div class="label">申請日時</div><div class="value">${r.overtime_requested_at || ''}</div></div>
+        <div class="row"><div class="label">終了予定</div><div class="value">${r.overtime_planned_end || ''}</div></div>
+        <div class="row"><div class="label">理由</div><div class="value">${r.overtime_reason || ''}</div></div>
+      </div>
+
+      <div class="block">
+        <div class="row"><div class="label">ヘルプ有無</div><div class="value">${yesNo(r.has_help)}</div></div>
+        <div class="row"><div class="label">ヘルプ部署</div><div class="value">${r.help_department || ''}</div></div>
+        <div class="row"><div class="label">ヘルプ時間</div><div class="value">${r.help_time || ''}</div></div>
+        <div class="row"><div class="label">備考</div><div class="value">${r.remarks || ''}</div></div>
+      </div>
+
+      <div class="block">
+        <div class="switch-row">
+          <div>
+            <div class="label">勤怠 上長承認</div>
+            <div>${approvedText(r.attendance_manager_approved_at)}</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox"
+              ${r.attendance_manager_approved_at ? 'checked disabled' : ''}
+              onchange="approveAttendance(${r.id}, this)">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="switch-row">
+          <div>
+            <div class="label">残業 上長承認</div>
+            <div>${approvedText(r.overtime_manager_approved_at)}</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox"
+              ${!overtimeExists ? 'disabled' : ''}
+              ${r.overtime_manager_approved_at ? 'checked disabled' : ''}
+              onchange="approveOvertimeManager(${r.id}, this)">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="switch-row">
+          <div>
+            <div class="label">残業 役員承認</div>
+            <div>${approvedText(r.overtime_executive_approved_at)}</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox"
+              ${!overtimeExists ? 'disabled' : ''}
+              ${r.overtime_executive_approved_at ? 'checked disabled' : ''}
+              onchange="approveOvertimeExecutive(${r.id}, this)">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="notice">
+          ※スイッチをONにすると承認済みになります。
+        </div>
+      </div>
+    `;
+
+    list.appendChild(card);
+  });
+
+  msg.textContent = `${data.length}件表示`;
+}
+
+async function approveAttendance(id, el){
+  const ok = confirm('勤怠を上長承認しますか？');
+  if(!ok){
+    el.checked = false;
+    return;
+  }
+
+  const res = await apiFetch('/api/approve/attendance',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      Authorization:'Bearer '+token
+    },
+    body:JSON.stringify({id})
+  });
+
+  if(!res.ok){
+    alert('承認に失敗しました');
+    el.checked = false;
+    return;
+  }
+
+  await load();
+}
+
+async function approveOvertimeManager(id, el){
+  const ok = confirm('残業申請を上長承認しますか？');
+  if(!ok){
+    el.checked = false;
+    return;
+  }
+
+  const res = await apiFetch('/api/approve/overtime/manager',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      Authorization:'Bearer '+token
+    },
+    body:JSON.stringify({id})
+  });
+
+  if(!res.ok){
+    alert('承認に失敗しました');
+    el.checked = false;
+    return;
+  }
+
+  await load();
+}
+
+async function approveOvertimeExecutive(id, el){
+  const ok = confirm('残業申請を役員承認しますか？');
+  if(!ok){
+    el.checked = false;
+    return;
+  }
+
+  const res = await apiFetch('/api/approve/overtime/executive',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      Authorization:'Bearer '+token
+    },
+    body:JSON.stringify({id})
+  });
+
+  if(!res.ok){
+    alert('承認に失敗しました');
+    el.checked = false;
+    return;
+  }
+
+  await load();
+}
+
+function resetSearch(){
+  document.getElementById('searchDate').value = '';
+  document.getElementById('searchName').value = '';
+  load();
+}
+
+async function downloadCsv(){
+  const month = document.getElementById('csvMonth').value;
+  const searchName = document.getElementById('searchName').value.trim();
+
+  if(!month){
+    alert('CSV対象月を選択してください');
+    return;
+  }
+
+  let url = `/api/admin/export-csv?month=${encodeURIComponent(month)}`;
+
+  if(searchName){
+    url += `&name=${encodeURIComponent(searchName)}`;
+  }
+
+  const res = await apiFetch(url, {
+    headers: {
+      Authorization: 'Bearer ' + token
+    }
+  });
+
+  if(!res.ok){
+    alert('CSV出力に失敗しました');
+    return;
+  }
+
+  const blob = await res.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = `kintai_${month}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  window.URL.revokeObjectURL(downloadUrl);
+}
+
+document.getElementById('searchBtn').onclick = load;
+document.getElementById('resetBtn').onclick = resetSearch;
+document.getElementById('csvBtn').onclick = downloadCsv;
+document.getElementById('csvMonth').value = new Date().toISOString().slice(0, 7);
+
+window.addEventListener('DOMContentLoaded', () => {
+  load();
+  loadUsers();
+  loadUserOptions();
+});
+
+async function loadUsers(){
+  if(!token) return;  // ← これ追加（超重要）
+
+  const res = await apiFetch('/api/admin/users', {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+
+  if(!res.ok){
+    console.log('ユーザー取得失敗');
+    return;
+  }
+
+  const users = await res.json();
+
+  const list = document.getElementById('userList');
+  if(!list) return;
+
+  list.innerHTML = '';
+
+  users.forEach(u => {
+    const div = document.createElement('div');
+    div.className = 'card';
+
+    div.innerHTML = `
+      <b>${u.name}</b> (${u.role})<br>
+      ${u.email}<br>
+      上長: ${u.manager_name || '-'} / 役員: ${u.executive_name || '-'}<br>
+      <button onclick="deleteUser(${u.id})" style="background:red;">削除</button>
+    `;
+
+    list.appendChild(div);
+  });
+}
+
+async function loadUserOptions(){
+  const res = await apiFetch('/api/register/options');
+  const data = await res.json();
+
+  const managerSelect = document.getElementById('u_manager');
+  const execSelect = document.getElementById('u_executive');
+
+  managerSelect.innerHTML = '<option value="">なし</option>';
+  execSelect.innerHTML = '<option value="">なし</option>';
+
+  data.managers.forEach(m => {
+    managerSelect.innerHTML += `<option value="${m.id}">${m.name}</option>`;
+  });
+
+  data.executives.forEach(e => {
+    execSelect.innerHTML += `<option value="${e.id}">${e.name}</option>`;
+  });
+}
+
+async function createUser(){
+  const res = await apiFetch('/api/admin/users', {
+    method:'POST',
+    body:JSON.stringify({
+      name:document.getElementById('u_name').value,
+      email:document.getElementById('u_email').value,
+      password:document.getElementById('u_password').value,
+      role:document.getElementById('u_role').value,
+      manager_id:document.getElementById('u_manager').value || null,
+      executive_id:document.getElementById('u_executive').value || null
+    })
+  });
+
+  if(res.ok){
+    alert('登録成功');
+    loadUsers();
+  }else{
+    alert('登録失敗');
+  }
+}
+
+async function deleteUser(id){
+  if(!confirm('削除しますか？')) return;
+
+  const res = await apiFetch('/api/admin/users/' + id, {
+    method:'DELETE',
+    headers:{ Authorization:'Bearer ' + token }
+  });
+
+  const data = await res.json();
+
+  if(!res.ok){
+    alert(data.error);
+    return;
+  }
+
+  loadUsers();
+}
+
+</script>
+
+</body>
+</html>

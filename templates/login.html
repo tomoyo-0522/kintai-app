@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ログイン</title>
+  <style>
+    body{font-family:sans-serif;background:#f6f8fb;margin:0}
+    .wrap{max-width:980px;margin:24px auto;padding:16px;display:grid;gap:16px;grid-template-columns:1fr 1fr}
+    .card{background:#fff;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.08);padding:20px}
+    h1,h2{margin-top:0}
+    label{display:block;margin:10px 0 6px;font-size:14px}
+    input,select,button{width:100%;padding:10px;border-radius:10px;border:1px solid #ccd3df;box-sizing:border-box}
+    input,select{margin-bottom:10px}
+    button{cursor:pointer;background:#1e66f5;color:#fff;border:none;font-weight:700;display:block;margin-top:14px}
+    .msg{min-height:20px;color:#c62828;font-size:14px;margin-top:10px}
+    .ok{color:#147d3f}
+    @media(max-width:800px){.wrap{grid-template-columns:1fr}}
+  </style>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1e66f5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="勤怠">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>勤怠ログイン</h1>
+      <label>メールアドレス</label>
+      <input id="loginEmail" type="email">
+      <label>パスワード</label>
+      <input id="loginPassword" type="password">
+      <button id="loginBtn" type="button">ログイン</button>
+      <div id="loginMsg" class="msg"></div>
+      <p>最初の1人だけ admin として登録できます。</p>
+    </div>
+
+    <div class="card">
+      <h2>新規登録</h2>
+      <label>名前</label>
+      <input id="regName" type="text">
+      <label>メールアドレス</label>
+      <input id="regEmail" type="email">
+      <label>パスワード</label>
+      <input id="regPassword" type="password">
+      <label>ロール</label>
+      <select id="regRole">
+  <option value="employee">employee</option>
+  <option value="manager">manager</option>
+  <option value="executive">executive</option>
+  <option value="admin">admin</option>
+</select>
+      <button id="regBtn" type="button">登録</button>
+      <div id="regMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <script>
+    const qs = s => document.querySelector(s);
+
+    function saveSession(data){
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('role', data.role);
+      localStorage.setItem('name', data.name);
+      localStorage.setItem('userId', data.userId);
+    }
+
+    qs('#loginBtn').onclick = async () => {
+      try {
+        const res = await fetch('/api/login', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            email: qs('#loginEmail').value,
+            password: qs('#loginPassword').value
+          })
+        });
+
+        const data = await res.json();
+        if(!res.ok){
+          qs('#loginMsg').textContent = data.error || 'ログイン失敗';
+          return;
+        }
+
+        saveSession(data);
+        location.href = '/stamp.html';
+      } catch (e) {
+        qs('#loginMsg').textContent = 'ログイン処理でエラーが発生しました';
+        console.error(e);
+      }
+    };
+
+    qs('#regBtn').onclick = async () => {
+      try {
+        const res = await fetch('/api/register', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            name: qs('#regName').value,
+            email: qs('#regEmail').value,
+            password: qs('#regPassword').value,
+            role: qs('#regRole').value
+          })
+        });
+
+        const data = await res.json();
+        if(!res.ok){
+          qs('#regMsg').textContent = data.error || '登録失敗';
+          qs('#regMsg').className = 'msg';
+          return;
+        }
+
+        qs('#regMsg').textContent = '登録が完了しました。ログインしてください。';
+        qs('#regMsg').className = 'msg ok';
+      } catch (e) {
+        qs('#regMsg').textContent = '登録処理でエラーが発生しました';
+        console.error(e);
+      }
+    };
+
+    if(localStorage.getItem('token')){
+      const role = localStorage.getItem('role');
+      location.href = role === 'admin' ? '/admin.html' : '/stamp.html';
+    }
+  </script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js");
+}
+</script>
+</body>
+</html>
