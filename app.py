@@ -635,38 +635,35 @@ def stamp():
             )
         )
 
-   db.commit()
+    db.commit()
 
-    # スプレッドシートに送るデータの中身を作る
+    # --- スプレッドシート同期データの作成と送信 ---
+    # 1. 打刻・備考・ヘルプ情報をひとまとめにして送信
     sync_data = [
         g.current_user["name"],    # [0] A列: 氏名
         work_date,                 # [1] B列: 年月日
-        "ヘルプ備考",               # [2] 区分 (スプレッドシート側でJ〜M列更新のトリガーになります)
-        now_text(),                # [3] 操作時刻
-        help_department,           # [4] K列: ヘルプ部署 (sync_to_google_sheet_asyncのdata[4]に対応)
-        help_time,                 # [5] L列: ヘルプ時間 (sync_to_google_sheet_asyncのdata[5]に対応)
-        remarks                    # [6] M列: 備考 (sync_to_google_sheet_asyncのdata[6]に対応)
-    ]
-    sync_to_sheet(sync_data)
-    # --- ここまで追加 ---
-
-    with db.cursor() as cur:
-        # ...（以下、既存の updated = cur.fetchone() などの処理）
-
-    # --- ここから修正（データの並び順をA〜M列に合わせる） ---
-    sync_data = [
-        g.current_user["name"],    # [0] A列: 氏名
-        work_date,                 # [1] B列: 年月日
-        label_map[stamp_type],     # [2] 区分 (出勤・休憩などの判定用)
-        ts,                        # [3] C〜F列: 打刻時刻
+        label_map[stamp_type],     # [2] 区分 (出勤/退勤など)
+        ts,                        # [3] C〜F列: 時刻
         "",                        # [4] H列用 (空)
         "",                        # [5] I列用 (空)
         remarks                    # [6] M列: 備考
     ]
     sync_to_sheet(sync_data)
-    # --- ここまで修正 ---
-    # --- ここまで追加 ---
 
+    # 2. ヘルプがある場合は、区分を「ヘルプ備考」として別途送信（J〜L列更新用）
+    if has_help:
+        help_sync_data = [
+            g.current_user["name"],
+            work_date,
+            "ヘルプ備考",
+            now_text(),
+            help_department,
+            help_time,
+            remarks
+        ]
+        sync_to_sheet(help_sync_data)
+
+    # 最新のレコードを取得してフロントエンドに返す
     with db.cursor() as cur:
         cur.execute(
             """
