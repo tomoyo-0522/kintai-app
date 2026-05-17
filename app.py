@@ -541,7 +541,7 @@ def stamp():
     data = request.get_json(force=True)
 
     work_date = (data.get("work_date") or today_text()).strip()
-    stamp_type = data.get("type")
+    stamp_type = data.get("type") 
     qr_value = data.get("qr_value")
     work_type = (data.get("work_type") or "").strip()
     has_help = 1 if data.get("has_help") else 0
@@ -549,21 +549,13 @@ def stamp():
     help_time = (data.get("help_time") or "").strip()
     remarks = (data.get("remarks") or "").strip()
 
-    # --- 修正箇所：QRコードの判定 ---
-    location = QR_MAP.get(qr_value)
-
-    # 修正：打刻（出勤・退勤など）を伴う場合はQR必須だが、
-    # 備考やヘルプ情報の更新（stamp_typeが既存リストにない場合など）はQRなしでも通す
-    if not location and stamp_type in field_map:
-        return jsonify({"error": "有効なQRコードではありません"}), 400
-
+    # --- 1. 定義（エラー回避のため最初に書く） ---
     field_map = {
         "clock_in": "clock_in",
         "break_start": "break_start",
         "break_end": "break_end",
         "clock_out": "clock_out"
     }
-
     label_map = {
         "clock_in": "出勤",
         "break_start": "休憩開始",
@@ -571,49 +563,49 @@ def stamp():
         "clock_out": "退勤"
     }
 
-    if stamp_type not in field_map:
-        return jsonify({"error": "打刻種別が不正です"}), 400
-
+    location = QR_MAP.get(qr_value)
     record = get_or_create_daily_record(g.current_user["id"], work_date)
-    existing_work_type = record.get("work_type")
-    target_field = field_map[stamp_type]
 
-    if record.get(target_field):
-        return jsonify({
-            "error": f"{label_map[stamp_type]}は既に登録されています。上書きはできません。"
-        }), 409
+    # --- 2. 条件チェック（バリデーション） ---
+    # 打刻ボタン（出勤・退勤など）の場合のみ厳しくチェック
+    if stamp_type in field_map:
+        if not location:
+            return jsonify({"error": "有効なQRコードではありません"}), 400
+        
+        if stamp_type == "clock_in" and not work_type and not record.get("work_type"):
+            return jsonify({"error": "出勤時は勤務形態を選択してください"}), 400
+        
+        if record.get(field_map[stamp_type]):
+            return jsonify({"error": f"{label_map[stamp_type]}は既に登録されています"}), 409
 
-    if stamp_type == "clock_in" and not work_type and not existing_work_type:
-        return jsonify({"error": "出勤時は勤務形態を選択してください"}), 400
-
+    # --- 3. データベース保存 ---
     ts = combine_work_date_and_now_time(work_date)
-    final_work_type = work_type or existing_work_type
-
     db = get_db()
 
     with db.cursor() as cur:
+        # 打刻の場合は attendance テーブルに履歴を入れる
+        if stamp_type in field_map:
+            cur.execute(
+                "INSERT INTO attendance (user_id, work_date, type, timestamp, location, qr_value) VALUES (%s, %s, %s, %s, %s, %s)",
+                (g.current_user["id"], work_date, stamp_type, ts, location, qr_value)
+            )
+
+        # daily_records (日次集計表) を更新
+        # ※打刻種別がある時だけそのカラム（clock_in等）を更新する
+        target_col = field_map.get(stamp_type)
+        if target_col:
+            cur.execute(
+                f"UPDATE daily_records SET {target_col} = %s WHERE user_id = %s AND work_date = %s",
+                (ts, g.current_user["id"], work_date)
+            )
+
+        # 共通項目（勤務形態、ヘルプ、備考）を更新
         cur.execute(
             """
-            INSERT INTO attendance (user_id, work_date, type, timestamp, location, qr_value)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            (
-                g.current_user["id"],
-                work_date,
-                stamp_type,
-                ts,
-                location,
-                qr_value
-            )
-        )
-
-        cur.execute(
-            f"""
             UPDATE daily_records
-            SET {target_field} = %s,
-                work_type = %s,
-                location = %s,
-                qr_value = %s,
+            SET work_type = COALESCE(NULLIF(%s, ''), work_type),
+                location = COALESCE(%s, location),
+                qr_value = COALESCE(%s, qr_value),
                 has_help = %s,
                 help_department = %s,
                 help_time = %s,
@@ -621,60 +613,22 @@ def stamp():
                 updated_at = CURRENT_TIMESTAMP
             WHERE user_id = %s AND work_date = %s
             """,
-            (
-                ts,
-                final_work_type,
-                location,
-                qr_value,
-                has_help,
-                help_department,
-                help_time,
-                remarks,
-                g.current_user["id"],
-                work_date
-            )
+            (work_type, location, qr_value, has_help, help_department, help_time, remarks, g.current_user["id"], work_date)
         )
 
     db.commit()
 
-    # --- スプレッドシート同期データの作成と送信 ---
-    # 1. 打刻・備考・ヘルプ情報をひとまとめにして送信
-    sync_data = [
-        g.current_user["name"],    # [0] A列: 氏名
-        work_date,                 # [1] B列: 年月日
-        label_map[stamp_type],     # [2] 区分 (出勤/退勤など)
-        ts,                        # [3] C〜F列: 時刻
-        "",                        # [4] H列用 (空)
-        "",                        # [5] I列用 (空)
-        remarks                    # [6] M列: 備考
-    ]
-    sync_to_sheet(sync_data)
+    # --- 4. スプレッドシート同期 ---
+    # 打刻のメインデータ
+    main_label = label_map.get(stamp_type, "情報更新")
+    sync_to_sheet([g.current_user["name"], work_date, main_label, ts, "", "", remarks])
 
-    # 2. ヘルプがある場合は、区分を「ヘルプ備考」として別途送信（J〜L列更新用）
+    # ヘルプがある場合は別途送信
     if has_help:
-        help_sync_data = [
-            g.current_user["name"],
-            work_date,
-            "ヘルプ備考",
-            now_text(),
-            help_department,
-            help_time,
-            remarks
-        ]
-        sync_to_sheet(help_sync_data)
+        sync_to_sheet([g.current_user["name"], work_date, "ヘルプ備考", now_text(), help_department, help_time, remarks])
 
-    # 最新のレコードを取得してフロントエンドに返す
-    with db.cursor() as cur:
-        cur.execute(
-            """
-            SELECT *
-            FROM daily_records
-            WHERE user_id = %s AND work_date = %s
-            """,
-            (g.current_user["id"], work_date)
-        )
-        updated = cur.fetchone()
-
+    # 最新状態を返却
+    updated = get_or_create_daily_record(g.current_user["id"], work_date)
     return jsonify({
         "message": "recorded",
         "type": stamp_type,
@@ -695,10 +649,10 @@ def overtime_request():
     if not planned_end_time or not reason:
         return jsonify({"error": "終了予定時刻と理由を入力してください"}), 400
 
+    # レコードがなければ作成
     get_or_create_daily_record(g.current_user["id"], work_date)
 
     db = get_db()
-
     with db.cursor() as cur:
         cur.execute(
             """
@@ -709,43 +663,24 @@ def overtime_request():
                 updated_at = CURRENT_TIMESTAMP
             WHERE user_id = %s AND work_date = %s
             """,
-            (
-                now_text(),
-                planned_end_time,
-                reason,
-                g.current_user["id"],
-                work_date
-            )
+            (now_text(), planned_end_time, reason, g.current_user["id"], work_date)
         )
-
     db.commit()
 
-    db.commit()
-
-    # --- ここから修正 ---
+    # スプレッドシート同期
     sync_data = [
-        g.current_user["name"],    # [0] A列: 氏名
-        work_date,                 # [1] B列: 年月日
-        "残業申請",                 # [2] 区分判定用
-        now_text(),                # [3] G列: 申請日時
-        planned_end_time,          # [4] H列: 終了予定時刻
-        reason,                    # [5] I列: 理由
-        ""                         # [6] M列: 備考
+        g.current_user["name"], 
+        work_date, 
+        "残業申請", 
+        now_text(), 
+        planned_end_time, 
+        reason, 
+        ""
     ]
     sync_to_sheet(sync_data)
-    # --- ここまで修正 ---
 
-    with db.cursor() as cur:
-        cur.execute(
-            """
-            SELECT *
-            FROM daily_records
-            WHERE user_id = %s AND work_date = %s
-            """,
-            (g.current_user["id"], work_date)
-        )
-        updated = cur.fetchone()
-
+    # フロントエンドに最新データを返す
+    updated = get_or_create_daily_record(g.current_user["id"], work_date)
     return jsonify({
         "message": "requested",
         "daily": build_daily_summary(updated)
