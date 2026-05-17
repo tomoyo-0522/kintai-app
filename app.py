@@ -549,9 +549,12 @@ def stamp():
     help_time = (data.get("help_time") or "").strip()
     remarks = (data.get("remarks") or "").strip()
 
+    # --- 修正箇所：QRコードの判定 ---
     location = QR_MAP.get(qr_value)
 
-    if not location:
+    # 修正：打刻（出勤・退勤など）を伴う場合はQR必須だが、
+    # 備考やヘルプ情報の更新（stamp_typeが既存リストにない場合など）はQRなしでも通す
+    if not location and stamp_type in field_map:
         return jsonify({"error": "有効なQRコードではありません"}), 400
 
     field_map = {
@@ -637,6 +640,25 @@ def stamp():
     # --- ここから追加 ---
     # スプレッドシートに送るデータの中身を作る
     db.commit()
+
+db.commit()
+
+    # --- ここからスプレッドシート同期コードを追加 ---
+    # ヘルプ・備考保存用のデータ構成
+    sync_data = [
+        g.current_user["name"],    # [0] A列: 氏名
+        work_date,                 # [1] B列: 年月日
+        "ヘルプ備考",               # [2] 区分 (スプレッドシート側でJ〜M列更新のトリガーになります)
+        now_text(),                # [3] 操作時刻
+        help_department,           # [4] K列: ヘルプ部署 (sync_to_google_sheet_asyncのdata[4]に対応)
+        help_time,                 # [5] L列: ヘルプ時間 (sync_to_google_sheet_asyncのdata[5]に対応)
+        remarks                    # [6] M列: 備考 (sync_to_google_sheet_asyncのdata[6]に対応)
+    ]
+    sync_to_sheet(sync_data)
+    # --- ここまで追加 ---
+
+    with db.cursor() as cur:
+        # ...（以下、既存の updated = cur.fetchone() などの処理）
 
     # --- ここから修正（データの並び順をA〜M列に合わせる） ---
     sync_data = [
